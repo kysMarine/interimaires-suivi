@@ -1191,13 +1191,19 @@
     document.getElementById('my-cal-month-label').textContent = monthLabel(myCalCurrent);
     const year=myCalCurrent.getFullYear(), month=myCalCurrent.getMonth();
     const first=new Date(year,month,1), last=new Date(year,month+1,0);
-    const datesWithEntries = new Set();
-    const snap = await db.collection('pointages_employes')
-      .where('personId','==',currentUser.linkedId)
-      .where('date','>=',toDateStr(first)).where('date','<=',toDateStr(last)).get();
-    snap.forEach(doc=> datesWithEntries.add(doc.data().date));
-
     const grid = document.getElementById('my-calendar-grid');
+    const datesWithEntries = new Set();
+    try{
+      const snap = await db.collection('pointages_employes')
+        .where('personId','==',currentUser.linkedId)
+        .where('date','>=',toDateStr(first)).where('date','<=',toDateStr(last)).get();
+      snap.forEach(doc=> datesWithEntries.add(doc.data().date));
+    }catch(err){
+      console.error(err);
+      grid.innerHTML = `<p class="message error" style="grid-column:1/-1">Erreur de chargement du calendrier : ${escapeHtml(err.message)}</p>`;
+      return;
+    }
+
     grid.innerHTML='';
     ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'].forEach(w=>{ const el=document.createElement('div'); el.className='cal-weekday'; el.textContent=w; grid.appendChild(el); });
     const leading=(first.getDay()+6)%7;
@@ -1220,10 +1226,16 @@
     document.getElementById('my-day-panel-title').textContent = humanDate(fromDateStr(ds));
     const body = document.getElementById('my-day-panel-body');
     body.innerHTML='';
-    const snap = await db.collection('pointages_employes')
-      .where('personId','==',currentUser.linkedId).where('date','==',ds).limit(1).get();
-    let docId = snap.empty ? null : snap.docs[0].id;
-    const data = snap.empty ? {} : snap.docs[0].data();
+    let docId = null, data = {};
+    try{
+      const snap = await db.collection('pointages_employes')
+        .where('personId','==',currentUser.linkedId).where('date','==',ds).limit(1).get();
+      if(!snap.empty){ docId = snap.docs[0].id; data = snap.docs[0].data(); }
+    }catch(err){
+      console.error(err);
+      body.innerHTML = `<tr><td colspan="4" class="message error">Erreur : ${escapeHtml(err.message)}</td></tr>`;
+      return;
+    }
 
     const tr=document.createElement('tr');
     const tdArr=document.createElement('td'); const inArr=document.createElement('input'); inArr.type='time'; inArr.value=data.heureArrivee||''; tdArr.appendChild(inArr);
@@ -1268,11 +1280,16 @@
   async function renderMyWeek(){
     const {start,end}=getWeekRange(myWeekRef);
     document.getElementById('my-week-label').textContent = `Semaine du ${start.toLocaleDateString('fr-FR')} au ${end.toLocaleDateString('fr-FR')}`;
-    const snap = await db.collection('pointages_employes')
-      .where('personId','==',currentUser.linkedId)
-      .where('date','>=',toDateStr(start)).where('date','<=',toDateStr(end)).get();
-    let total=0; snap.forEach(doc=> total += doc.data().heuresCalculees||0);
-    document.getElementById('my-week-total').textContent = `Total : ${fmtHeures(total)}`;
+    try{
+      const snap = await db.collection('pointages_employes')
+        .where('personId','==',currentUser.linkedId)
+        .where('date','>=',toDateStr(start)).where('date','<=',toDateStr(end)).get();
+      let total=0; snap.forEach(doc=> total += doc.data().heuresCalculees||0);
+      document.getElementById('my-week-total').textContent = `Total : ${fmtHeures(total)}`;
+    }catch(err){
+      console.error(err);
+      document.getElementById('my-week-total').textContent = `Erreur : ${err.message}`;
+    }
   }
   document.getElementById('my-week-prev').addEventListener('click', ()=>{ myWeekRef=addDays(myWeekRef,-7); renderMyWeek(); });
   document.getElementById('my-week-next').addEventListener('click', ()=>{ myWeekRef=addDays(myWeekRef,7); renderMyWeek(); });
@@ -1281,11 +1298,16 @@
     const now=new Date();
     document.getElementById('my-month-label').textContent = monthLabel(now);
     const first=new Date(now.getFullYear(),now.getMonth(),1), last=new Date(now.getFullYear(),now.getMonth()+1,0);
-    const snap = await db.collection('pointages_employes')
-      .where('personId','==',currentUser.linkedId)
-      .where('date','>=',toDateStr(first)).where('date','<=',toDateStr(last)).get();
-    let total=0; snap.forEach(doc=> total+=doc.data().heuresCalculees||0);
-    document.getElementById('my-month-total').textContent = `Total : ${fmtHeures(total)}`;
+    try{
+      const snap = await db.collection('pointages_employes')
+        .where('personId','==',currentUser.linkedId)
+        .where('date','>=',toDateStr(first)).where('date','<=',toDateStr(last)).get();
+      let total=0; snap.forEach(doc=> total+=doc.data().heuresCalculees||0);
+      document.getElementById('my-month-total').textContent = `Total : ${fmtHeures(total)}`;
+    }catch(err){
+      console.error(err);
+      document.getElementById('my-month-total').textContent = `Erreur : ${err.message}`;
+    }
   }
 
   function renderMonEspace(){ renderMyCalendar(); renderMyWeek(); renderMyMonth(); }
@@ -1295,15 +1317,21 @@
      ========================================================== */
   async function initApp(){
     await refreshCaches();
-    renderAgencesTab();
-    renderUtilisateursTab();
-    renderInterimairesTab();
-    renderEmployesListTable();
-    calInterimaires.goToday();
-    calEmployes.goToday();
-    renderSemaineInterimaires();
-    renderSemaineEmployes();
-    renderMoisEmployes();
+    if(currentUser.role==='admin'){
+      renderAgencesTab();
+      renderUtilisateursTab();
+      renderInterimairesTab();
+      renderEmployesListTable();
+    }
+    if(currentUser.role==='admin' || currentUser.role==='responsable'){
+      calEmployes.goToday();
+      renderSemaineEmployes();
+      renderMoisEmployes();
+    }
+    if(currentUser.role!=='employe'){
+      calInterimaires.goToday();
+      renderSemaineInterimaires();
+    }
     if(currentUser.role==='employe') renderMonEspace();
   }
 
