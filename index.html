@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gestion des intérimaires — KYS Marine</title>
+<title>Portail intérimaires & Salariés — KYS Marine</title>
 <style>
   :root{
     --color-bg:#F4F6F5;
@@ -251,7 +251,7 @@
   <!-- Écran de connexion -->
   <div id="login-screen" class="screen">
     <div class="login-box">
-      <h1>Gestion des intérimaires</h1>
+      <h1>Portail intérimaires &amp; Salariés</h1>
       <p class="muted">Connectez-vous avec votre adresse e-mail et votre mot de passe.</p>
       <div class="auth-mode-toggle">
         <button type="button" id="auth-mode-login" class="active">Se connecter</button>
@@ -280,7 +280,7 @@
   <!-- Application -->
   <div id="app-screen" class="screen" hidden>
     <header class="topbar">
-      <h1>Gestion des intérimaires</h1>
+      <h1>Portail intérimaires &amp; Salariés</h1>
       <div class="topbar-right">
         <span id="user-info" class="muted"></span>
         <button id="logout-btn" class="secondary">Se déconnecter</button>
@@ -288,8 +288,8 @@
     </header>
 
     <nav class="tabs">
-      <button class="tab-btn active not-employe" data-tab="calendrier">Calendrier</button>
-      <button class="tab-btn not-employe" data-tab="semaine">Récap semaine</button>
+      <button class="tab-btn active not-employe" data-tab="calendrier">Calendrier Intérim</button>
+      <button class="tab-btn not-employe" data-tab="semaine">Récap semaine Intérim</button>
       <button class="tab-btn admin-only" data-tab="interimaires" hidden>Intérimaires</button>
       <button class="tab-btn admin-only" data-tab="agences" hidden>Agences</button>
       <button class="tab-btn manager-only" data-tab="employes" hidden>Employés</button>
@@ -851,6 +851,25 @@
         tdActions.appendChild(reactivateBtn);
       }
 
+      const delBtn = document.createElement('button'); delBtn.className='icon-btn danger'; delBtn.textContent='Supprimer';
+      if(u.id === currentUser.uid){
+        delBtn.disabled = true;
+        delBtn.title = "Tu ne peux pas supprimer ton propre compte.";
+      } else {
+        delBtn.addEventListener('click', async ()=>{
+          if(!confirm(`Supprimer définitivement le compte ${u.email} ?\n\nSon rôle et son association seront effacés. Si cette personne se reconnecte plus tard, elle repartira "en attente" comme un nouveau compte.`)) return;
+          try{
+            await db.collection('users').doc(u.id).delete();
+            toast('Compte supprimé');
+            renderUtilisateursTab();
+          }catch(err){
+            console.error(err);
+            toast("Erreur : " + err.message, true);
+          }
+        });
+      }
+      tdActions.appendChild(delBtn);
+
       tr.append(tdEmail, tdStatus, tdRole, tdAssoc, tdActions);
       body.appendChild(tr);
     });
@@ -1016,8 +1035,8 @@
       const editable = cfg.canEdit();
       const tr=document.createElement('tr');
       const tdName=document.createElement('td'); tdName.textContent = `${person.nom} ${person.prenom||''}`.trim();
-      const tdArr=document.createElement('td'); const inArr=document.createElement('input'); inArr.type='time'; inArr.value=entry.heureArrivee||''; inArr.disabled=!editable; tdArr.appendChild(inArr);
-      const tdDep=document.createElement('td'); const inDep=document.createElement('input'); inDep.type='time'; inDep.value=entry.heureDepart||''; inDep.disabled=!editable; tdDep.appendChild(inDep);
+      const tdArr=document.createElement('td'); const inArr=document.createElement('input'); inArr.type='time'; inArr.step='900'; inArr.value=entry.heureArrivee||''; inArr.disabled=!editable; tdArr.appendChild(inArr);
+      const tdDep=document.createElement('td'); const inDep=document.createElement('input'); inDep.type='time'; inDep.step='900'; inDep.value=entry.heureDepart||''; inDep.disabled=!editable; tdDep.appendChild(inDep);
       const tdPause=document.createElement('td'); const inPause=document.createElement('input'); inPause.type='number'; inPause.min='0'; inPause.step='5'; inPause.value=entry.pauseMinutes||0; inPause.disabled=!editable; tdPause.appendChild(inPause);
       const tdHeures=document.createElement('td'); tdHeures.className='heures-cell';
       const tdActions=document.createElement('td');
@@ -1058,8 +1077,8 @@
       const sel=document.createElement('select');
       sel.innerHTML = available.map(p=>`<option value="${p.id}">${escapeHtml(p.nom)} ${escapeHtml(p.prenom)}</option>`).join('');
       tdName.appendChild(sel);
-      const tdArr=document.createElement('td'); const inArr=document.createElement('input'); inArr.type='time'; tdArr.appendChild(inArr);
-      const tdDep=document.createElement('td'); const inDep=document.createElement('input'); inDep.type='time'; tdDep.appendChild(inDep);
+      const tdArr=document.createElement('td'); const inArr=document.createElement('input'); inArr.type='time'; inArr.step='900'; tdArr.appendChild(inArr);
+      const tdDep=document.createElement('td'); const inDep=document.createElement('input'); inDep.type='time'; inDep.step='900'; tdDep.appendChild(inDep);
       const tdPause=document.createElement('td'); const inPause=document.createElement('input'); inPause.type='number'; inPause.min='0'; inPause.step='5'; inPause.value=0; tdPause.appendChild(inPause);
       const tdHeures=document.createElement('td'); tdHeures.textContent='—';
       const tdActions=document.createElement('td');
@@ -1238,8 +1257,8 @@
     }
 
     const tr=document.createElement('tr');
-    const tdArr=document.createElement('td'); const inArr=document.createElement('input'); inArr.type='time'; inArr.value=data.heureArrivee||''; tdArr.appendChild(inArr);
-    const tdDep=document.createElement('td'); const inDep=document.createElement('input'); inDep.type='time'; inDep.value=data.heureDepart||''; tdDep.appendChild(inDep);
+    const tdArr=document.createElement('td'); const inArr=document.createElement('input'); inArr.type='time'; inArr.step='900'; inArr.value=data.heureArrivee||''; tdArr.appendChild(inArr);
+    const tdDep=document.createElement('td'); const inDep=document.createElement('input'); inDep.type='time'; inDep.step='900'; inDep.value=data.heureDepart||''; tdDep.appendChild(inDep);
     const tdPause=document.createElement('td'); const inPause=document.createElement('input'); inPause.type='number'; inPause.min='0'; inPause.step='5'; inPause.value=data.pauseMinutes||0; tdPause.appendChild(inPause);
     const tdHeures=document.createElement('td'); tdHeures.className='heures-cell';
 
