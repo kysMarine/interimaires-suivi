@@ -292,7 +292,7 @@
       <button class="tab-btn not-employe" data-tab="semaine">Récap semaine</button>
       <button class="tab-btn admin-only" data-tab="interimaires" hidden>Intérimaires</button>
       <button class="tab-btn admin-only" data-tab="agences" hidden>Agences</button>
-      <button class="tab-btn admin-only" data-tab="employes" hidden>Employés</button>
+      <button class="tab-btn manager-only" data-tab="employes" hidden>Employés</button>
       <button class="tab-btn admin-only" data-tab="utilisateurs" hidden>Utilisateurs</button>
       <button class="tab-btn employe-only" data-tab="mon-espace" hidden>Mon espace</button>
     </nav>
@@ -438,16 +438,18 @@
         <tfoot><tr><td><strong>Total général</strong></td><td id="emp-month-total"><strong>0</strong></td></tr></tfoot>
       </table>
 
-      <h2>Liste des employés</h2>
-      <form id="employe-form" class="inline-form">
-        <input type="text" id="emp-nom" placeholder="Nom" required>
-        <input type="text" id="emp-prenom" placeholder="Prénom" required>
-        <button type="submit">Ajouter</button>
-      </form>
-      <table class="data-table">
-        <thead><tr><th>Nom</th><th>Prénom</th><th>Actif</th><th></th></tr></thead>
-        <tbody id="employes-body"></tbody>
-      </table>
+      <div class="admin-only" hidden>
+        <h2>Liste des employés</h2>
+        <form id="employe-form" class="inline-form">
+          <input type="text" id="emp-nom" placeholder="Nom" required>
+          <input type="text" id="emp-prenom" placeholder="Prénom" required>
+          <button type="submit">Ajouter</button>
+        </form>
+        <table class="data-table">
+          <thead><tr><th>Nom</th><th>Prénom</th><th>Actif</th><th></th></tr></thead>
+          <tbody id="employes-body"></tbody>
+        </table>
+      </div>
     </section>
 
     <!-- Onglet Mon espace (employé) -->
@@ -560,7 +562,7 @@
     return div.innerHTML;
   }
   function nomComplet(p){ return p ? `${p.nom} ${p.prenom}` : ''; }
-  function roleLabel(r){ return {admin:'Administrateur', agence:'Agence', employe:'Employé'}[r] || r; }
+  function roleLabel(r){ return {admin:'Administrateur', responsable:'Responsable', agence:'Agence', employe:'Employé'}[r] || r; }
 
   function toast(msg, isError){
     let c = document.getElementById('toast-container');
@@ -608,6 +610,7 @@
   }
   function applyRoleUI(role){
     document.querySelectorAll('.admin-only').forEach(el=> el.hidden = role!=='admin');
+    document.querySelectorAll('.manager-only').forEach(el=> el.hidden = !(role==='admin' || role==='responsable'));
     document.querySelectorAll('.employe-only').forEach(el=> el.hidden = role!=='employe');
     document.querySelectorAll('.not-employe').forEach(el=> el.hidden = role==='employe');
     switchTab(role==='employe' ? 'mon-espace' : 'calendrier');
@@ -703,6 +706,10 @@
     }
     const data = snap.data();
     const status = data.status || (data.role ? 'approved' : 'pending');
+    if(!data.status && data.role){
+      // Compte créé avant l'ajout du champ "status" : on le répare silencieusement.
+      ref.update({ status }).catch(err=> console.warn('Auto-réparation du statut impossible :', err.message));
+    }
     currentUser = { uid:user.uid, email:user.email, role:data.role||null, linkedId:data.linkedId||null, status };
     if(currentUser.status === 'refused'){
       document.getElementById('pending-title').textContent = "Accès refusé";
@@ -785,13 +792,13 @@
 
       if(status === 'pending'){
         const typeSel = document.createElement('select');
-        typeSel.innerHTML = `<option value="employe">Employé</option><option value="agence">Agence</option><option value="admin">Admin</option>`;
+        typeSel.innerHTML = `<option value="employe">Employé</option><option value="responsable">Responsable</option><option value="agence">Agence</option><option value="admin">Admin</option>`;
         tdRole.appendChild(typeSel);
 
         const assocSel = document.createElement('select');
         tdAssoc.appendChild(assocSel);
         function refreshAssoc(){
-          if(typeSel.value==='admin'){ assocSel.innerHTML=''; assocSel.hidden=true; return; }
+          if(typeSel.value==='admin' || typeSel.value==='responsable'){ assocSel.innerHTML=''; assocSel.hidden=true; return; }
           assocSel.hidden=false;
           const list = typeSel.value==='agence' ? [...cache.agences.values()] : [...cache.employes.values()];
           assocSel.innerHTML = list.map(x=>`<option value="${x.id}">${escapeHtml(nomComplet(x)||x.nom)}</option>`).join('');
@@ -801,10 +808,11 @@
 
         const validBtn = document.createElement('button'); validBtn.className='secondary'; validBtn.textContent='Valider';
         validBtn.addEventListener('click', async ()=>{
-          if(typeSel.value!=='admin' && !assocSel.value){ toast('Sélectionne à qui associer ce compte', true); return; }
+          const needsAssoc = typeSel.value!=='admin' && typeSel.value!=='responsable';
+          if(needsAssoc && !assocSel.value){ toast('Sélectionne à qui associer ce compte', true); return; }
           await db.collection('users').doc(u.id).update({
             role: typeSel.value,
-            linkedId: typeSel.value==='admin' ? null : assocSel.value,
+            linkedId: needsAssoc ? assocSel.value : null,
             status: 'approved'
           });
           toast('Compte validé');
@@ -1090,8 +1098,8 @@
     addRowBtn: document.getElementById('add-row-btn'),
     personsSource: ()=> [...cache.interimaires.values()].filter(p=> p.actif && (currentUser.role!=='agence' || p.agenceId===currentUser.linkedId)),
     pointagesCollection: 'pointages_interimaires',
-    canEdit: ()=> currentUser.role==='admin' || currentUser.role==='agence',
-    canAddRemove: ()=> currentUser.role==='admin'
+    canEdit: ()=> currentUser.role==='admin' || currentUser.role==='responsable',
+    canAddRemove: ()=> currentUser.role==='admin' || currentUser.role==='responsable'
   });
 
   const calEmployes = createPersonCalendar({
@@ -1105,8 +1113,8 @@
     addRowBtn: document.getElementById('emp-add-row-btn'),
     personsSource: ()=> [...cache.employes.values()].filter(p=>p.actif),
     pointagesCollection: 'pointages_employes',
-    canEdit: ()=> true,
-    canAddRemove: ()=> true
+    canEdit: ()=> currentUser.role==='admin' || currentUser.role==='responsable',
+    canAddRemove: ()=> currentUser.role==='admin' || currentUser.role==='responsable'
   });
 
   /* ==========================================================
@@ -1214,13 +1222,42 @@
     body.innerHTML='';
     const snap = await db.collection('pointages_employes')
       .where('personId','==',currentUser.linkedId).where('date','==',ds).limit(1).get();
+    let docId = snap.empty ? null : snap.docs[0].id;
+    const data = snap.empty ? {} : snap.docs[0].data();
+
     const tr=document.createElement('tr');
-    if(snap.empty){
-      tr.innerHTML = `<td colspan="4" class="muted">Aucune heure enregistrée ce jour-là.</td>`;
-    } else {
-      const d = snap.docs[0].data();
-      tr.innerHTML = `<td>${d.heureArrivee||'—'}</td><td>${d.heureDepart||'—'}</td><td>${d.pauseMinutes||0}</td><td>${fmtHeures(d.heuresCalculees)}</td>`;
+    const tdArr=document.createElement('td'); const inArr=document.createElement('input'); inArr.type='time'; inArr.value=data.heureArrivee||''; tdArr.appendChild(inArr);
+    const tdDep=document.createElement('td'); const inDep=document.createElement('input'); inDep.type='time'; inDep.value=data.heureDepart||''; tdDep.appendChild(inDep);
+    const tdPause=document.createElement('td'); const inPause=document.createElement('input'); inPause.type='number'; inPause.min='0'; inPause.step='5'; inPause.value=data.pauseMinutes||0; tdPause.appendChild(inPause);
+    const tdHeures=document.createElement('td'); tdHeures.className='heures-cell';
+
+    function recalc(){ tdHeures.textContent = fmtHeures(computeHeures(inArr.value, inDep.value, inPause.value)); }
+    recalc();
+
+    async function save(){
+      const heures = computeHeures(inArr.value, inDep.value, inPause.value);
+      const payload = {
+        date: ds, personId: currentUser.linkedId,
+        heureArrivee: inArr.value||null, heureDepart: inDep.value||null,
+        pauseMinutes: Number(inPause.value)||0, heuresCalculees: heures
+      };
+      try{
+        if(docId){
+          await db.collection('pointages_employes').doc(docId).update({ ...payload, updatedAt: FieldValue.serverTimestamp() });
+        } else {
+          const ref = await db.collection('pointages_employes').add({ ...payload, createdAt: FieldValue.serverTimestamp() });
+          docId = ref.id;
+        }
+        recalc();
+        renderMyCalendar();
+        toast('Enregistré');
+      }catch(err){
+        console.error(err);
+        toast("Erreur d'enregistrement : " + err.message, true);
+      }
     }
+    [inArr,inDep,inPause].forEach(inp=> inp.addEventListener('change', save));
+    tr.append(tdArr, tdDep, tdPause, tdHeures);
     body.appendChild(tr);
   }
 
