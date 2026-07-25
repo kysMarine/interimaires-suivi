@@ -205,6 +205,19 @@
     border-radius:999px; padding:.3em .8em; font-size:.8rem; font-weight:700;
   }
   .pill-toggle.on{background:#E1F0E7; color:var(--color-success);}
+  .pill-toggle.refused{background:var(--color-danger-bg); color:var(--color-danger);}
+
+  .auth-mode-toggle{
+    display:flex; border:1px solid var(--color-border); border-radius:8px; overflow:hidden;
+    margin-top:.4rem;
+  }
+  .auth-mode-toggle button{
+    flex:1; background:transparent; color:var(--color-muted); border-radius:0;
+    padding:.5em .6em; font-size:.85rem;
+  }
+  .auth-mode-toggle button.active{background:var(--color-primary); color:#fff;}
+  .forgot-password{font-size:.82rem; margin-top:-.3rem;}
+  .forgot-password a{color:var(--color-primary); cursor:pointer;}
 
   .inline-form{
     display:flex; flex-wrap:wrap; gap:.6rem; align-items:center;
@@ -239,20 +252,27 @@
   <div id="login-screen" class="screen">
     <div class="login-box">
       <h1>Gestion des intérimaires</h1>
-      <p class="muted">Connectez-vous avec votre adresse e-mail. Un lien de connexion vous sera envoyé.</p>
+      <p class="muted">Connectez-vous avec votre adresse e-mail et votre mot de passe.</p>
+      <div class="auth-mode-toggle">
+        <button type="button" id="auth-mode-login" class="active">Se connecter</button>
+        <button type="button" id="auth-mode-signup">Créer un compte</button>
+      </div>
       <form id="login-form">
         <input type="email" id="login-email" placeholder="votre.email@exemple.com" required>
-        <button type="submit">Recevoir le lien de connexion</button>
+        <input type="password" id="login-password" placeholder="Mot de passe" minlength="6" required>
+        <input type="password" id="login-password-confirm" placeholder="Confirmer le mot de passe" minlength="6" hidden>
+        <p class="forgot-password" id="forgot-password-wrap"><a id="forgot-password-link">Mot de passe oublié ?</a></p>
+        <button type="submit" id="login-submit-btn">Se connecter</button>
       </form>
       <p id="login-message" class="message"></p>
     </div>
   </div>
 
-  <!-- Écran "en attente d'association" -->
+  <!-- Écran "en attente / refusé" -->
   <div id="pending-screen" class="screen" hidden>
     <div class="login-box">
-      <h1>Compte en attente</h1>
-      <p>Votre compte a bien été créé mais n'est pas encore associé à une agence ou à un employé. Contactez l'administrateur.</p>
+      <h1 id="pending-title">Compte en attente</h1>
+      <p id="pending-text">Votre compte a bien été créé mais n'est pas encore validé par un administrateur. Contactez-le pour activer votre accès.</p>
       <button id="pending-logout">Se déconnecter</button>
     </div>
   </div>
@@ -273,6 +293,7 @@
       <button class="tab-btn admin-only" data-tab="interimaires" hidden>Intérimaires</button>
       <button class="tab-btn admin-only" data-tab="agences" hidden>Agences</button>
       <button class="tab-btn admin-only" data-tab="employes" hidden>Employés</button>
+      <button class="tab-btn admin-only" data-tab="utilisateurs" hidden>Utilisateurs</button>
       <button class="tab-btn employe-only" data-tab="mon-espace" hidden>Mon espace</button>
     </nav>
 
@@ -358,18 +379,15 @@
         <thead><tr><th>Nom</th><th>E-mail</th><th></th></tr></thead>
         <tbody id="agences-body"></tbody>
       </table>
+    </section>
 
-      <h2>Comptes en attente d'association</h2>
-      <p class="muted">Ces personnes se sont connectées mais ne sont pas encore rattachées à une agence ou à un employé.</p>
+    <!-- Onglet Utilisateurs (admin) -->
+    <section id="tab-utilisateurs" class="tab-content" hidden>
+      <h2>Comptes utilisateurs</h2>
+      <p class="muted">Valide ou refuse l'accès des personnes qui créent un compte sur ce site. Seuls les administrateurs voient cet onglet.</p>
       <table class="data-table">
-        <thead><tr><th>E-mail</th><th>Type</th><th>Associer à</th><th></th></tr></thead>
-        <tbody id="pending-accounts-body"></tbody>
-      </table>
-
-      <h2>Comptes associés</h2>
-      <table class="data-table">
-        <thead><tr><th>E-mail</th><th>Type</th><th>Associé à</th></tr></thead>
-        <tbody id="linked-accounts-body"></tbody>
+        <thead><tr><th>E-mail</th><th>Statut</th><th>Rôle</th><th>Associé à</th><th></th></tr></thead>
+        <tbody id="utilisateurs-body"></tbody>
       </table>
     </section>
 
@@ -487,7 +505,7 @@
 
   // E-mail(s) qui reçoivent automatiquement le rôle "admin" à la toute première connexion
   const ADMIN_EMAILS = [
-    "n.ocipski@gmail.com" // <-- à remplacer par ta propre adresse
+    "n.ocipski@gmail.com"
   ];
 
   firebase.initializeApp(firebaseConfig);
@@ -596,43 +614,74 @@
   }
 
   /* ==========================================================
-     AUTHENTIFICATION
+     AUTHENTIFICATION (e-mail + mot de passe)
      ========================================================== */
+  let authMode = 'login'; // 'login' | 'signup'
+
+  function setAuthMode(mode){
+    authMode = mode;
+    document.getElementById('auth-mode-login').classList.toggle('active', mode==='login');
+    document.getElementById('auth-mode-signup').classList.toggle('active', mode==='signup');
+    document.getElementById('login-password-confirm').hidden = mode!=='signup';
+    document.getElementById('login-password-confirm').required = mode==='signup';
+    document.getElementById('forgot-password-wrap').hidden = mode!=='login';
+    document.getElementById('login-submit-btn').textContent = mode==='signup' ? 'Créer mon compte' : 'Se connecter';
+    document.getElementById('login-message').textContent = '';
+  }
+  document.getElementById('auth-mode-login').addEventListener('click', ()=> setAuthMode('login'));
+  document.getElementById('auth-mode-signup').addEventListener('click', ()=> setAuthMode('signup'));
+
+  function authErrorMessage(err){
+    const map = {
+      'auth/email-already-in-use': "Cette adresse e-mail a déjà un compte. Essaie de te connecter, ou utilise \u00ab Mot de passe oublié \u00bb.",
+      'auth/invalid-email': "Adresse e-mail invalide.",
+      'auth/weak-password': "Mot de passe trop court (6 caractères minimum).",
+      'auth/wrong-password': "Mot de passe incorrect.",
+      'auth/user-not-found': "Aucun compte avec cette adresse e-mail.",
+      'auth/invalid-credential': "E-mail ou mot de passe incorrect.",
+      'auth/too-many-requests': "Trop de tentatives. Réessaie plus tard.",
+      'custom/mismatch': "Les mots de passe ne correspondent pas."
+    };
+    return map[err.code] || ("Erreur : " + (err.message || 'inconnue'));
+  }
+
   document.getElementById('login-form').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
     const msgEl = document.getElementById('login-message');
-    const actionCodeSettings = {
-      url: window.location.href.split('#')[0].split('?')[0],
-      handleCodeInApp: true
-    };
+    msgEl.classList.remove('error');
     try{
-      await auth.sendSignInLinkToEmail(email, actionCodeSettings);
-      window.localStorage.setItem('emailForSignIn', email);
-      msgEl.textContent = "Un lien de connexion a été envoyé à " + email + ". Vérifiez votre boîte mail.";
-      msgEl.classList.remove('error');
+      if(authMode==='signup'){
+        const confirmPwd = document.getElementById('login-password-confirm').value;
+        if(password !== confirmPwd){ throw { code:'custom/mismatch' }; }
+        await auth.createUserWithEmailAndPassword(email, password);
+      } else {
+        await auth.signInWithEmailAndPassword(email, password);
+      }
+      msgEl.textContent = '';
     }catch(err){
       console.error(err);
-      msgEl.textContent = "Erreur : " + err.message;
+      msgEl.textContent = authErrorMessage(err);
       msgEl.classList.add('error');
     }
   });
 
-  async function completeEmailLinkSignIn(){
-    if(auth.isSignInWithEmailLink(window.location.href)){
-      let email = window.localStorage.getItem('emailForSignIn');
-      if(!email){ email = window.prompt('Confirmez votre adresse e-mail pour terminer la connexion :'); }
-      if(!email) return;
-      try{
-        await auth.signInWithEmailLink(email, window.location.href);
-        window.localStorage.removeItem('emailForSignIn');
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }catch(err){
-        console.error(err);
-        alert("Erreur de connexion : " + err.message);
-      }
+  document.getElementById('forgot-password-link').addEventListener('click', async (e)=>{
+    e.preventDefault();
+    const email = document.getElementById('login-email').value.trim();
+    const msgEl = document.getElementById('login-message');
+    if(!email){ msgEl.textContent = "Entre ton e-mail ci-dessus puis clique à nouveau sur le lien."; msgEl.classList.add('error'); return; }
+    try{
+      await auth.sendPasswordResetEmail(email);
+      msgEl.classList.remove('error');
+      msgEl.textContent = "E-mail de réinitialisation envoyé à " + email + ".";
+    }catch(err){
+      console.error(err);
+      msgEl.textContent = authErrorMessage(err);
+      msgEl.classList.add('error');
     }
-  }
+  });
 
   document.getElementById('logout-btn').addEventListener('click', ()=> auth.signOut());
   document.getElementById('pending-logout').addEventListener('click', ()=> auth.signOut());
@@ -642,13 +691,31 @@
     const ref = db.collection('users').doc(user.uid);
     let snap = await ref.get();
     if(!snap.exists){
-      const role = ADMIN_EMAILS.includes(user.email) ? 'admin' : null;
-      await ref.set({ email:user.email, role, linkedId:null, createdAt: FieldValue.serverTimestamp() });
+      const isAdmin = ADMIN_EMAILS.includes(user.email);
+      await ref.set({
+        email:user.email,
+        role: isAdmin ? 'admin' : null,
+        linkedId: null,
+        status: isAdmin ? 'approved' : 'pending',
+        createdAt: FieldValue.serverTimestamp()
+      });
       snap = await ref.get();
     }
     const data = snap.data();
-    currentUser = { uid:user.uid, email:user.email, role:data.role||null, linkedId:data.linkedId||null };
-    if(!currentUser.role){ showScreen('pending'); return; }
+    const status = data.status || (data.role ? 'approved' : 'pending');
+    currentUser = { uid:user.uid, email:user.email, role:data.role||null, linkedId:data.linkedId||null, status };
+    if(currentUser.status === 'refused'){
+      document.getElementById('pending-title').textContent = "Accès refusé";
+      document.getElementById('pending-text').textContent = "Ta demande d'accès a été refusée par l'administrateur. Contacte-le si tu penses qu'il s'agit d'une erreur.";
+      showScreen('pending');
+      return;
+    }
+    if(!currentUser.role || currentUser.status !== 'approved'){
+      document.getElementById('pending-title').textContent = "Compte en attente";
+      document.getElementById('pending-text').textContent = "Ton compte a bien été créé mais n'est pas encore validé par un administrateur.";
+      showScreen('pending');
+      return;
+    }
     document.getElementById('user-info').textContent = `${user.email} (${roleLabel(currentUser.role)})`;
     showScreen('app');
     applyRoleUI(currentUser.role);
@@ -690,52 +757,96 @@
     });
   }
 
-  async function renderComptesTab(){
-    const usersSnap = await db.collection('users').get();
-    const pendingBody = document.getElementById('pending-accounts-body');
-    const linkedBody = document.getElementById('linked-accounts-body');
-    pendingBody.innerHTML=''; linkedBody.innerHTML='';
+  function renderAgencesTab(){ renderAgencesList(); }
+
+  /* ==========================================================
+     ONGLET UTILISATEURS (admin) — valider / refuser les comptes
+     ========================================================== */
+  async function renderUtilisateursTab(){
+    const usersSnap = await db.collection('users').orderBy('createdAt','desc').get();
+    const body = document.getElementById('utilisateurs-body');
+    body.innerHTML = '';
     usersSnap.forEach(doc=>{
       const u = { id: doc.id, ...doc.data() };
-      if(!u.role){
-        const tr = document.createElement('tr');
-        const tdEmail = document.createElement('td'); tdEmail.textContent = u.email;
-        const tdType = document.createElement('td');
+      const status = u.status || (u.role ? 'approved' : 'pending');
+      const tr = document.createElement('tr');
+
+      const tdEmail = document.createElement('td'); tdEmail.textContent = u.email;
+
+      const tdStatus = document.createElement('td');
+      const pill = document.createElement('span');
+      pill.className = 'pill-toggle' + (status==='approved' ? ' on' : status==='refused' ? ' refused' : '');
+      pill.textContent = status==='approved' ? 'Validé' : status==='refused' ? 'Refusé' : 'En attente';
+      tdStatus.appendChild(pill);
+
+      const tdRole = document.createElement('td');
+      const tdAssoc = document.createElement('td');
+      const tdActions = document.createElement('td');
+
+      if(status === 'pending'){
         const typeSel = document.createElement('select');
-        typeSel.innerHTML = `<option value="agence">Agence</option><option value="employe">Employé</option>`;
-        tdType.appendChild(typeSel);
-        const tdAssoc = document.createElement('td');
+        typeSel.innerHTML = `<option value="employe">Employé</option><option value="agence">Agence</option><option value="admin">Admin</option>`;
+        tdRole.appendChild(typeSel);
+
         const assocSel = document.createElement('select');
         tdAssoc.appendChild(assocSel);
-        function refreshAssocOptions(){
+        function refreshAssoc(){
+          if(typeSel.value==='admin'){ assocSel.innerHTML=''; assocSel.hidden=true; return; }
+          assocSel.hidden=false;
           const list = typeSel.value==='agence' ? [...cache.agences.values()] : [...cache.employes.values()];
           assocSel.innerHTML = list.map(x=>`<option value="${x.id}">${escapeHtml(nomComplet(x)||x.nom)}</option>`).join('');
         }
-        typeSel.addEventListener('change', refreshAssocOptions);
-        refreshAssocOptions();
-        const tdBtn = document.createElement('td');
-        const btn = document.createElement('button'); btn.textContent='Associer'; btn.className='secondary';
-        btn.addEventListener('click', async ()=>{
-          if(!assocSel.value){ toast("Aucun élément disponible à associer", true); return; }
-          await db.collection('users').doc(u.id).update({ role: typeSel.value, linkedId: assocSel.value });
-          toast('Compte associé');
-          renderComptesTab();
+        typeSel.addEventListener('change', refreshAssoc);
+        refreshAssoc();
+
+        const validBtn = document.createElement('button'); validBtn.className='secondary'; validBtn.textContent='Valider';
+        validBtn.addEventListener('click', async ()=>{
+          if(typeSel.value!=='admin' && !assocSel.value){ toast('Sélectionne à qui associer ce compte', true); return; }
+          await db.collection('users').doc(u.id).update({
+            role: typeSel.value,
+            linkedId: typeSel.value==='admin' ? null : assocSel.value,
+            status: 'approved'
+          });
+          toast('Compte validé');
+          renderUtilisateursTab();
         });
-        tdBtn.appendChild(btn);
-        tr.append(tdEmail, tdType, tdAssoc, tdBtn);
-        pendingBody.appendChild(tr);
-      } else {
-        const tr = document.createElement('tr');
+        const refuseBtn = document.createElement('button'); refuseBtn.className='icon-btn danger'; refuseBtn.textContent='Refuser';
+        refuseBtn.addEventListener('click', async ()=>{
+          if(!confirm(`Refuser l'accès à ${u.email} ?`)) return;
+          await db.collection('users').doc(u.id).update({ status:'refused', role:null, linkedId:null });
+          toast('Accès refusé');
+          renderUtilisateursTab();
+        });
+        tdActions.append(validBtn, refuseBtn);
+      } else if(status === 'approved'){
+        tdRole.textContent = roleLabel(u.role);
         let label = '—';
         if(u.role==='agence') label = cache.agences.get(u.linkedId)?.nom || '—';
         if(u.role==='employe') label = nomComplet(cache.employes.get(u.linkedId)) || '—';
-        tr.innerHTML = `<td>${escapeHtml(u.email)}</td><td>${roleLabel(u.role)}</td><td>${escapeHtml(label)}</td>`;
-        linkedBody.appendChild(tr);
+        tdAssoc.textContent = label;
+        const revokeBtn = document.createElement('button'); revokeBtn.className='icon-btn danger'; revokeBtn.textContent='Révoquer';
+        revokeBtn.addEventListener('click', async ()=>{
+          if(!confirm(`Révoquer l'accès de ${u.email} ? Le compte repassera en attente.`)) return;
+          await db.collection('users').doc(u.id).update({ status:'pending', role:null, linkedId:null });
+          toast('Accès révoqué');
+          renderUtilisateursTab();
+        });
+        tdActions.appendChild(revokeBtn);
+      } else {
+        tdRole.textContent = '—'; tdAssoc.textContent = '—';
+        const reactivateBtn = document.createElement('button'); reactivateBtn.className='secondary'; reactivateBtn.textContent='Réactiver';
+        reactivateBtn.addEventListener('click', async ()=>{
+          await db.collection('users').doc(u.id).update({ status:'pending' });
+          toast('Compte remis en attente');
+          renderUtilisateursTab();
+        });
+        tdActions.appendChild(reactivateBtn);
       }
+
+      tr.append(tdEmail, tdStatus, tdRole, tdAssoc, tdActions);
+      body.appendChild(tr);
     });
   }
-
-  function renderAgencesTab(){ renderAgencesList(); renderComptesTab(); }
 
   /* ==========================================================
      ONGLET INTÉRIMAIRES (admin)
@@ -1148,6 +1259,7 @@
   async function initApp(){
     await refreshCaches();
     renderAgencesTab();
+    renderUtilisateursTab();
     renderInterimairesTab();
     renderEmployesListTable();
     calInterimaires.goToday();
@@ -1159,7 +1271,6 @@
   }
 
   initTabs();
-  completeEmailLinkSignIn();
   </script>
 </body>
 </html>
