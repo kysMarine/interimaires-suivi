@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestion des intérimaires — KYS Marine</title>
+<style>
+  :root{
+    --color-bg:#F4F6F5;
+    --color-surface:#FFFFFF;
+    --color-ink:#122726;
+    --color-primary:#1B4B4F;
+    --color-primary-dark:#123336;
+    --color-accent:#C98A3A;
+    --color-border:#DCE3E1;
+    --color-muted:#647471;
+    --color-danger:#B3452C;
+    --color-danger-bg:#FBEAE5;
+    --color-success:#3F7D5C;
+    --radius:10px;
+    --shadow:0 1px 2px rgba(15,42,46,.06), 0 6px 16px rgba(15,42,46,.06);
+    --font-body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:var(--font-body);
+    background:var(--color-bg);
+    color:var(--color-ink);
+    line-height:1.45;
+  }
+  h1,h2,h3{margin:0 0 .5em 0; letter-spacing:-.01em;}
+  h1{font-size:1.4rem;}
+  h2{font-size:1.1rem; margin-top:1.8em;}
+  h3{font-size:1rem;}
+  .muted{color:var(--color-muted);}
+  [hidden]{display:none !important;}
+
+  button{
+    font-family:inherit;
+    cursor:pointer;
+    border:none;
+    border-radius:8px;
+    padding:.55em 1.1em;
+    font-size:.92rem;
+    background:var(--color-primary);
+    color:#fff;
+    transition:background .15s ease, transform .05s ease;
+  }
+  button:hover{background:var(--color-primary-dark);}
+  button:active{transform:translateY(1px);}
+  button.secondary{
+    background:transparent;
+    color:var(--color-primary);
+    border:1px solid var(--color-border);
+  }
+  button.secondary:hover{background:#EEF3F2; }
+  button.icon-btn{
+    background:transparent;
+    color:var(--color-muted);
+    border:1px solid var(--color-border);
+    padding:.35em .7em;
+    font-size:.85rem;
+  }
+  button.icon-btn:hover{background:#F0F2F1; color:var(--color-ink);}
+  button.icon-btn.danger{color:var(--color-danger); border-color:#EAD2CA;}
+  button.icon-btn.danger:hover{background:var(--color-danger-bg);}
+
+  input, select{
+    font-family:inherit;
+    font-size:.92rem;
+    padding:.5em .65em;
+    border:1px solid var(--color-border);
+    border-radius:8px;
+    background:#fff;
+    color:var(--color-ink);
+  }
+  input:disabled{background:#F4F5F4; color:var(--color-muted);}
+  input:focus, select:focus, button:focus-visible{
+    outline:2px solid var(--color-accent);
+    outline-offset:1px;
+  }
+
+  /* ---------- Screens ---------- */
+  .screen{min-height:100vh;}
+  #login-screen, #pending-screen{
+    display:flex; align-items:center; justify-content:center;
+    min-height:100vh; padding:1.5rem;
+  }
+  .login-box{
+    background:var(--color-surface);
+    border:1px solid var(--color-border);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:2.2rem 2rem;
+    max-width:380px;
+    width:100%;
+    text-align:center;
+  }
+  .login-box form{display:flex; flex-direction:column; gap:.7rem; margin-top:1.2rem;}
+  .message{min-height:1.2em; font-size:.88rem; margin-top:.9rem;}
+  .message.error{color:var(--color-danger);}
+
+  /* ---------- App shell ---------- */
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:.9rem 1.4rem;
+    background:var(--color-surface);
+    border-bottom:1px solid var(--color-border);
+    position:sticky; top:0; z-index:5;
+  }
+  .topbar h1{font-size:1.15rem; color:var(--color-primary-dark);}
+  .topbar-right{display:flex; align-items:center; gap:1rem; font-size:.88rem;}
+
+  .tabs{
+    display:flex; flex-wrap:wrap; gap:.3rem;
+    padding:.7rem 1.4rem 0;
+    background:var(--color-surface);
+    border-bottom:1px solid var(--color-border);
+  }
+  .tab-btn{
+    background:transparent; color:var(--color-muted);
+    border-radius:8px 8px 0 0;
+    padding:.6em 1em;
+    font-weight:600;
+    border-bottom:2px solid transparent;
+  }
+  .tab-btn:hover{color:var(--color-ink); background:#F0F2F1;}
+  .tab-btn.active{color:var(--color-primary); border-bottom-color:var(--color-accent); background:transparent;}
+
+  .tab-content{padding:1.4rem; max-width:1080px; margin:0 auto;}
+
+  /* ---------- Calendar ---------- */
+  .calendar-nav{
+    display:flex; align-items:center; justify-content:center; gap:1.2rem;
+    margin:.6rem 0 1rem;
+  }
+  .calendar-nav h2{margin:0; min-width:200px; text-align:center; text-transform:capitalize;}
+  .calendar-nav button{padding:.4em .8em;}
+  .calendar-grid{
+    display:grid;
+    grid-template-columns:repeat(7,1fr);
+    gap:6px;
+  }
+  .cal-weekday{
+    text-align:center; font-size:.78rem; font-weight:700;
+    color:var(--color-muted); padding:.3em 0; text-transform:uppercase; letter-spacing:.04em;
+  }
+  .cal-cell{
+    position:relative;
+    background:var(--color-surface);
+    border:1px solid var(--color-border);
+    border-radius:8px;
+    min-height:62px;
+    padding:.4em .5em;
+    cursor:pointer;
+    transition:box-shadow .12s ease, border-color .12s ease;
+  }
+  .cal-cell:hover{box-shadow:var(--shadow); border-color:#C7D3D0;}
+  .cal-cell.empty{background:transparent; border-color:transparent; cursor:default;}
+  .cal-cell.today{border-color:var(--color-primary);}
+  .cal-cell.selected{outline:2px solid var(--color-accent); outline-offset:-2px;}
+  .cal-day-num{font-size:.85rem; font-weight:600;}
+  .cal-badge{
+    position:absolute; bottom:.4em; right:.5em;
+    background:var(--color-accent); color:#fff;
+    font-size:.68rem; font-weight:700;
+    border-radius:999px; padding:.05em .5em;
+  }
+
+  .day-panel{
+    margin-top:1.3rem;
+    background:var(--color-surface);
+    border:1px solid var(--color-border);
+    border-radius:var(--radius);
+    padding:1.1rem 1.2rem;
+    box-shadow:var(--shadow);
+  }
+  .add-row-btn{margin-top:.8rem;}
+
+  /* ---------- Tables ---------- */
+  .data-table{
+    width:100%;
+    border-collapse:collapse;
+    background:var(--color-surface);
+    font-size:.9rem;
+  }
+  .data-table th, .data-table td{
+    padding:.55em .6em;
+    border-bottom:1px solid var(--color-border);
+    text-align:left;
+    vertical-align:middle;
+  }
+  .data-table thead th{
+    color:var(--color-muted); font-size:.78rem; text-transform:uppercase; letter-spacing:.03em;
+    font-weight:700;
+  }
+  .data-table input[type="time"], .data-table input[type="number"]{width:100%; min-width:70px;}
+  .data-table select{width:100%;}
+  .heures-cell{font-weight:700; color:var(--color-primary-dark);}
+  .tab-content{overflow-x:auto;}
+
+  .pill-toggle{
+    background:#EFE6D8; color:#8A6A2E;
+    border-radius:999px; padding:.3em .8em; font-size:.8rem; font-weight:700;
+  }
+  .pill-toggle.on{background:#E1F0E7; color:var(--color-success);}
+
+  .inline-form{
+    display:flex; flex-wrap:wrap; gap:.6rem; align-items:center;
+    margin-bottom:1rem;
+  }
+  .inline-form input, .inline-form select{flex:1 1 160px;}
+
+  /* ---------- Toasts ---------- */
+  #toast-container{
+    position:fixed; bottom:1.2rem; right:1.2rem;
+    display:flex; flex-direction:column; gap:.5rem; z-index:50;
+  }
+  .toast{
+    background:var(--color-primary-dark); color:#fff;
+    padding:.7em 1.1em; border-radius:8px; box-shadow:var(--shadow);
+    font-size:.87rem; opacity:0; transform:translateY(6px);
+    transition:opacity .2s ease, transform .2s ease;
+  }
+  .toast.show{opacity:1; transform:translateY(0);}
+  .toast.toast-error{background:var(--color-danger);}
+
+  @media (max-width:640px){
+    .topbar{flex-direction:column; align-items:flex-start; gap:.5rem;}
+    .tab-content{padding:1rem .7rem;}
+    .calendar-nav h2{min-width:0;}
+  }
+</style>
+</head>
+<body>
+
+  <!-- Écran de connexion -->
+  <div id="login-screen" class="screen">
+    <div class="login-box">
+      <h1>Gestion des intérimaires</h1>
+      <p class="muted">Connectez-vous avec votre adresse e-mail. Un lien de connexion vous sera envoyé.</p>
+      <form id="login-form">
+        <input type="email" id="login-email" placeholder="votre.email@exemple.com" required>
+        <button type="submit">Recevoir le lien de connexion</button>
+      </form>
+      <p id="login-message" class="message"></p>
+    </div>
+  </div>
+
+  <!-- Écran "en attente d'association" -->
+  <div id="pending-screen" class="screen" hidden>
+    <div class="login-box">
+      <h1>Compte en attente</h1>
+      <p>Votre compte a bien été créé mais n'est pas encore associé à une agence ou à un employé. Contactez l'administrateur.</p>
+      <button id="pending-logout">Se déconnecter</button>
+    </div>
+  </div>
+
+  <!-- Application -->
+  <div id="app-screen" class="screen" hidden>
+    <header class="topbar">
+      <h1>Gestion des intérimaires</h1>
+      <div class="topbar-right">
+        <span id="user-info" class="muted"></span>
+        <button id="logout-btn" class="secondary">Se déconnecter</button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab-btn active not-employe" data-tab="calendrier">Calendrier</button>
+      <button class="tab-btn not-employe" data-tab="semaine">Récap semaine</button>
+      <button class="tab-btn admin-only" data-tab="interimaires" hidden>Intérimaires</button>
+      <button class="tab-btn admin-only" data-tab="agences" hidden>Agences</button>
+      <button class="tab-btn admin-only" data-tab="employes" hidden>Employés</button>
+      <button class="tab-btn employe-only" data-tab="mon-espace" hidden>Mon espace</button>
+    </nav>
+
+    <!-- Onglet Calendrier -->
+    <section id="tab-calendrier" class="tab-content">
+      <div class="calendar-nav">
+        <button id="cal-prev" class="secondary">&larr;</button>
+        <h2 id="cal-month-label"></h2>
+        <button id="cal-next" class="secondary">&rarr;</button>
+      </div>
+      <div id="calendar-grid" class="calendar-grid"></div>
+
+      <div id="day-panel" class="day-panel" hidden>
+        <h3 id="day-panel-title"></h3>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Intérimaire</th>
+              <th>Heure d'arrivée</th>
+              <th>Heure de départ</th>
+              <th>Pause (min)</th>
+              <th>Heures de travail (calculées)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="day-panel-body"></tbody>
+        </table>
+        <button type="button" id="add-row-btn" class="secondary add-row-btn admin-only" hidden>+ Ajouter un intérimaire</button>
+      </div>
+    </section>
+
+    <!-- Onglet Récap semaine -->
+    <section id="tab-semaine" class="tab-content" hidden>
+      <div class="calendar-nav">
+        <button id="week-prev" class="secondary">&larr;</button>
+        <h2 id="week-label"></h2>
+        <button id="week-next" class="secondary">&rarr;</button>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Intérimaire</th>
+            <th>Agence</th>
+            <th>Total heures (semaine)</th>
+          </tr>
+        </thead>
+        <tbody id="week-body"></tbody>
+        <tfoot>
+          <tr>
+            <td colspan="2"><strong>Total général</strong></td>
+            <td id="week-total"><strong>0</strong></td>
+          </tr>
+        </tfoot>
+      </table>
+    </section>
+
+    <!-- Onglet Intérimaires (admin) -->
+    <section id="tab-interimaires" class="tab-content" hidden>
+      <h2>Intérimaires</h2>
+      <form id="interimaire-form" class="inline-form">
+        <input type="text" id="int-nom" placeholder="Nom" required>
+        <input type="text" id="int-prenom" placeholder="Prénom" required>
+        <select id="int-agence"></select>
+        <button type="submit">Ajouter</button>
+      </form>
+      <table class="data-table">
+        <thead>
+          <tr><th>Nom</th><th>Prénom</th><th>Agence</th><th>Actif</th><th></th></tr>
+        </thead>
+        <tbody id="interimaires-body"></tbody>
+      </table>
+    </section>
+
+    <!-- Onglet Agences (admin) -->
+    <section id="tab-agences" class="tab-content" hidden>
+      <h2>Agences d'intérim</h2>
+      <form id="agence-form" class="inline-form">
+        <input type="text" id="agence-nom" placeholder="Nom de l'agence" required>
+        <input type="email" id="agence-email" placeholder="E-mail de contact">
+        <button type="submit">Ajouter</button>
+      </form>
+      <table class="data-table">
+        <thead><tr><th>Nom</th><th>E-mail</th><th></th></tr></thead>
+        <tbody id="agences-body"></tbody>
+      </table>
+
+      <h2>Comptes en attente d'association</h2>
+      <p class="muted">Ces personnes se sont connectées mais ne sont pas encore rattachées à une agence ou à un employé.</p>
+      <table class="data-table">
+        <thead><tr><th>E-mail</th><th>Type</th><th>Associer à</th><th></th></tr></thead>
+        <tbody id="pending-accounts-body"></tbody>
+      </table>
+
+      <h2>Comptes associés</h2>
+      <table class="data-table">
+        <thead><tr><th>E-mail</th><th>Type</th><th>Associé à</th></tr></thead>
+        <tbody id="linked-accounts-body"></tbody>
+      </table>
+    </section>
+
+    <!-- Onglet Employés (admin) -->
+    <section id="tab-employes" class="tab-content" hidden>
+      <h2>Calendrier employés</h2>
+      <div class="calendar-nav">
+        <button id="emp-cal-prev" class="secondary">&larr;</button>
+        <h2 id="emp-cal-month-label"></h2>
+        <button id="emp-cal-next" class="secondary">&rarr;</button>
+      </div>
+      <div id="emp-calendar-grid" class="calendar-grid"></div>
+
+      <div id="emp-day-panel" class="day-panel" hidden>
+        <h3 id="emp-day-panel-title"></h3>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Employé</th>
+              <th>Heure d'arrivée</th>
+              <th>Heure de départ</th>
+              <th>Pause (min)</th>
+              <th>Heures de travail (calculées)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="emp-day-panel-body"></tbody>
+        </table>
+        <button type="button" id="emp-add-row-btn" class="secondary add-row-btn">+ Ajouter un employé</button>
+      </div>
+
+      <h2>Récap semaine</h2>
+      <div class="calendar-nav">
+        <button id="emp-week-prev" class="secondary">&larr;</button>
+        <h2 id="emp-week-label"></h2>
+        <button id="emp-week-next" class="secondary">&rarr;</button>
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Employé</th><th>Total heures (semaine)</th></tr></thead>
+        <tbody id="emp-week-body"></tbody>
+        <tfoot><tr><td><strong>Total général</strong></td><td id="emp-week-total"><strong>0</strong></td></tr></tfoot>
+      </table>
+
+      <h2>Récap mois <span id="emp-month-label" class="muted"></span></h2>
+      <table class="data-table">
+        <thead><tr><th>Employé</th><th>Total heures (mois)</th></tr></thead>
+        <tbody id="emp-month-body"></tbody>
+        <tfoot><tr><td><strong>Total général</strong></td><td id="emp-month-total"><strong>0</strong></td></tr></tfoot>
+      </table>
+
+      <h2>Liste des employés</h2>
+      <form id="employe-form" class="inline-form">
+        <input type="text" id="emp-nom" placeholder="Nom" required>
+        <input type="text" id="emp-prenom" placeholder="Prénom" required>
+        <button type="submit">Ajouter</button>
+      </form>
+      <table class="data-table">
+        <thead><tr><th>Nom</th><th>Prénom</th><th>Actif</th><th></th></tr></thead>
+        <tbody id="employes-body"></tbody>
+      </table>
+    </section>
+
+    <!-- Onglet Mon espace (employé) -->
+    <section id="tab-mon-espace" class="tab-content" hidden>
+      <div class="calendar-nav">
+        <button id="my-cal-prev" class="secondary">&larr;</button>
+        <h2 id="my-cal-month-label"></h2>
+        <button id="my-cal-next" class="secondary">&rarr;</button>
+      </div>
+      <div id="my-calendar-grid" class="calendar-grid"></div>
+
+      <div id="my-day-panel" class="day-panel" hidden>
+        <h3 id="my-day-panel-title"></h3>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Heure d'arrivée</th>
+              <th>Heure de départ</th>
+              <th>Pause (min)</th>
+              <th>Heures de travail</th>
+            </tr>
+          </thead>
+          <tbody id="my-day-panel-body"></tbody>
+        </table>
+      </div>
+
+      <h2>Récap semaine</h2>
+      <div class="calendar-nav">
+        <button id="my-week-prev" class="secondary">&larr;</button>
+        <h2 id="my-week-label"></h2>
+        <button id="my-week-next" class="secondary">&rarr;</button>
+      </div>
+      <p id="my-week-total" class="muted"></p>
+
+      <h2>Récap mois <span id="my-month-label" class="muted"></span></h2>
+      <p id="my-month-total" class="muted"></p>
+    </section>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+  /* ==========================================================
+     CONFIGURATION — à compléter avant mise en ligne
+     ========================================================== */
+  const firebaseConfig = {
+    apiKey: "AIzaSyAJunBTBd67xtahW8O-H9Bci7oFmi1nXoQ",
+    authDomain: "kys-marine-interimaires.firebaseapp.com",
+    projectId: "kys-marine-interimaires",
+    storageBucket: "kys-marine-interimaires.firebasestorage.app",
+    messagingSenderId: "713856643741",
+    appId: "1:713856643741:web:4280191013c81a0af65a74"
+  };
+
+  // E-mail(s) qui reçoivent automatiquement le rôle "admin" à la toute première connexion
+  const ADMIN_EMAILS = [
+    "n.ocipski@gmail.com" // <-- à remplacer par ta propre adresse
+  ];
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+  const FieldValue = firebase.firestore.FieldValue;
+
+  /* ==========================================================
+     UTILITAIRES
+     ========================================================== */
+  function pad2(n){ return String(n).padStart(2,'0'); }
+  function toDateStr(d){ return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
+  function fromDateStr(s){ const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); }
+  function timeToMin(t){
+    if(!t) return null;
+    const parts = t.split(':').map(Number);
+    if(parts.length<2 || Number.isNaN(parts[0]) || Number.isNaN(parts[1])) return null;
+    return parts[0]*60+parts[1];
+  }
+  function computeHeures(arr, dep, pause){
+    const a=timeToMin(arr), d=timeToMin(dep);
+    if(a==null || d==null) return null;
+    let diff = d - a;
+    if(diff < 0) diff += 24*60;
+    diff -= (Number(pause)||0);
+    if(diff < 0) diff = 0;
+    return diff/60;
+  }
+  function fmtHeures(h){
+    if(h==null || Number.isNaN(h)) return '—';
+    const totalMin = Math.round(h*60);
+    const hh = Math.floor(totalMin/60), mm = totalMin%60;
+    return mm ? `${hh}h${pad2(mm)}` : `${hh}h`;
+  }
+  function startOfWeek(d){
+    const day=(d.getDay()+6)%7;
+    const r=new Date(d.getFullYear(), d.getMonth(), d.getDate()-day);
+    return r;
+  }
+  function addDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+  function humanDate(d){
+    const s = d.toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    return s.charAt(0).toUpperCase()+s.slice(1);
+  }
+  function monthLabel(d){
+    const s = d.toLocaleDateString('fr-FR', {month:'long', year:'numeric'});
+    return s.charAt(0).toUpperCase()+s.slice(1);
+  }
+  function escapeHtml(s){
+    const div=document.createElement('div');
+    div.textContent = s==null ? '' : String(s);
+    return div.innerHTML;
+  }
+  function nomComplet(p){ return p ? `${p.nom} ${p.prenom}` : ''; }
+  function roleLabel(r){ return {admin:'Administrateur', agence:'Agence', employe:'Employé'}[r] || r; }
+
+  function toast(msg, isError){
+    let c = document.getElementById('toast-container');
+    if(!c){ c=document.createElement('div'); c.id='toast-container'; document.body.appendChild(c); }
+    const t=document.createElement('div');
+    t.className = 'toast' + (isError?' toast-error':'');
+    t.textContent = msg;
+    c.appendChild(t);
+    requestAnimationFrame(()=> t.classList.add('show'));
+    setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(),300); }, 2500);
+  }
+
+  /* ==========================================================
+     ÉTAT GLOBAL
+     ========================================================== */
+  let currentUser = null; // {uid, email, role, linkedId}
+  const cache = { agences: new Map(), interimaires: new Map(), employes: new Map() };
+
+  async function refreshCaches(){
+    const [agSnap, intSnap, empSnap] = await Promise.all([
+      db.collection('agences').orderBy('nom').get(),
+      db.collection('interimaires').orderBy('nom').get(),
+      db.collection('employes').orderBy('nom').get()
+    ]);
+    cache.agences.clear(); agSnap.forEach(d=> cache.agences.set(d.id, {id:d.id, ...d.data()}));
+    cache.interimaires.clear(); intSnap.forEach(d=> cache.interimaires.set(d.id, {id:d.id, ...d.data()}));
+    cache.employes.clear(); empSnap.forEach(d=> cache.employes.set(d.id, {id:d.id, ...d.data()}));
+  }
+
+  /* ==========================================================
+     ÉCRANS ET ONGLETS
+     ========================================================== */
+  function showScreen(name){
+    document.querySelectorAll('.screen').forEach(s=> s.hidden = true);
+    document.getElementById(name+'-screen').hidden = false;
+  }
+  function initTabs(){
+    document.querySelectorAll('.tab-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=> switchTab(btn.dataset.tab));
+    });
+  }
+  function switchTab(tab){
+    document.querySelectorAll('.tab-btn').forEach(b=> b.classList.toggle('active', b.dataset.tab===tab));
+    document.querySelectorAll('.tab-content').forEach(s=> s.hidden = (s.id !== 'tab-'+tab));
+  }
+  function applyRoleUI(role){
+    document.querySelectorAll('.admin-only').forEach(el=> el.hidden = role!=='admin');
+    document.querySelectorAll('.employe-only').forEach(el=> el.hidden = role!=='employe');
+    document.querySelectorAll('.not-employe').forEach(el=> el.hidden = role==='employe');
+    switchTab(role==='employe' ? 'mon-espace' : 'calendrier');
+  }
+
+  /* ==========================================================
+     AUTHENTIFICATION
+     ========================================================== */
+  document.getElementById('login-form').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const email = document.getElementById('login-email').value.trim();
+    const msgEl = document.getElementById('login-message');
+    const actionCodeSettings = {
+      url: window.location.href.split('#')[0].split('?')[0],
+      handleCodeInApp: true
+    };
+    try{
+      await auth.sendSignInLinkToEmail(email, actionCodeSettings);
+      window.localStorage.setItem('emailForSignIn', email);
+      msgEl.textContent = "Un lien de connexion a été envoyé à " + email + ". Vérifiez votre boîte mail.";
+      msgEl.classList.remove('error');
+    }catch(err){
+      console.error(err);
+      msgEl.textContent = "Erreur : " + err.message;
+      msgEl.classList.add('error');
+    }
+  });
+
+  async function completeEmailLinkSignIn(){
+    if(auth.isSignInWithEmailLink(window.location.href)){
+      let email = window.localStorage.getItem('emailForSignIn');
+      if(!email){ email = window.prompt('Confirmez votre adresse e-mail pour terminer la connexion :'); }
+      if(!email) return;
+      try{
+        await auth.signInWithEmailLink(email, window.location.href);
+        window.localStorage.removeItem('emailForSignIn');
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }catch(err){
+        console.error(err);
+        alert("Erreur de connexion : " + err.message);
+      }
+    }
+  }
+
+  document.getElementById('logout-btn').addEventListener('click', ()=> auth.signOut());
+  document.getElementById('pending-logout').addEventListener('click', ()=> auth.signOut());
+
+  auth.onAuthStateChanged(async (user)=>{
+    if(!user){ currentUser=null; showScreen('login'); return; }
+    const ref = db.collection('users').doc(user.uid);
+    let snap = await ref.get();
+    if(!snap.exists){
+      const role = ADMIN_EMAILS.includes(user.email) ? 'admin' : null;
+      await ref.set({ email:user.email, role, linkedId:null, createdAt: FieldValue.serverTimestamp() });
+      snap = await ref.get();
+    }
+    const data = snap.data();
+    currentUser = { uid:user.uid, email:user.email, role:data.role||null, linkedId:data.linkedId||null };
+    if(!currentUser.role){ showScreen('pending'); return; }
+    document.getElementById('user-info').textContent = `${user.email} (${roleLabel(currentUser.role)})`;
+    showScreen('app');
+    applyRoleUI(currentUser.role);
+    initApp();
+  });
+
+  /* ==========================================================
+     ONGLET AGENCES (admin)
+     ========================================================== */
+  document.getElementById('agence-form').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const nom = document.getElementById('agence-nom').value.trim();
+    const email = document.getElementById('agence-email').value.trim();
+    if(!nom) return;
+    await db.collection('agences').add({ nom, email: email||null, createdAt: FieldValue.serverTimestamp() });
+    e.target.reset();
+    await refreshCaches();
+    renderAgencesTab();
+    renderInterimairesTab();
+    toast('Agence ajoutée');
+  });
+
+  function renderAgencesList(){
+    const body = document.getElementById('agences-body');
+    body.innerHTML = '';
+    [...cache.agences.values()].forEach(a=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${escapeHtml(a.nom)}</td><td>${escapeHtml(a.email||'—')}</td><td></td>`;
+      const delBtn = document.createElement('button');
+      delBtn.className='icon-btn danger'; delBtn.textContent='Supprimer';
+      delBtn.addEventListener('click', async ()=>{
+        if(!confirm(`Supprimer l'agence ${a.nom} ?`)) return;
+        await db.collection('agences').doc(a.id).delete();
+        await refreshCaches(); renderAgencesTab(); renderInterimairesTab();
+        toast('Agence supprimée');
+      });
+      tr.lastElementChild.appendChild(delBtn);
+      body.appendChild(tr);
+    });
+  }
+
+  async function renderComptesTab(){
+    const usersSnap = await db.collection('users').get();
+    const pendingBody = document.getElementById('pending-accounts-body');
+    const linkedBody = document.getElementById('linked-accounts-body');
+    pendingBody.innerHTML=''; linkedBody.innerHTML='';
+    usersSnap.forEach(doc=>{
+      const u = { id: doc.id, ...doc.data() };
+      if(!u.role){
+        const tr = document.createElement('tr');
+        const tdEmail = document.createElement('td'); tdEmail.textContent = u.email;
+        const tdType = document.createElement('td');
+        const typeSel = document.createElement('select');
+        typeSel.innerHTML = `<option value="agence">Agence</option><option value="employe">Employé</option>`;
+        tdType.appendChild(typeSel);
+        const tdAssoc = document.createElement('td');
+        const assocSel = document.createElement('select');
+        tdAssoc.appendChild(assocSel);
+        function refreshAssocOptions(){
+          const list = typeSel.value==='agence' ? [...cache.agences.values()] : [...cache.employes.values()];
+          assocSel.innerHTML = list.map(x=>`<option value="${x.id}">${escapeHtml(nomComplet(x)||x.nom)}</option>`).join('');
+        }
+        typeSel.addEventListener('change', refreshAssocOptions);
+        refreshAssocOptions();
+        const tdBtn = document.createElement('td');
+        const btn = document.createElement('button'); btn.textContent='Associer'; btn.className='secondary';
+        btn.addEventListener('click', async ()=>{
+          if(!assocSel.value){ toast("Aucun élément disponible à associer", true); return; }
+          await db.collection('users').doc(u.id).update({ role: typeSel.value, linkedId: assocSel.value });
+          toast('Compte associé');
+          renderComptesTab();
+        });
+        tdBtn.appendChild(btn);
+        tr.append(tdEmail, tdType, tdAssoc, tdBtn);
+        pendingBody.appendChild(tr);
+      } else {
+        const tr = document.createElement('tr');
+        let label = '—';
+        if(u.role==='agence') label = cache.agences.get(u.linkedId)?.nom || '—';
+        if(u.role==='employe') label = nomComplet(cache.employes.get(u.linkedId)) || '—';
+        tr.innerHTML = `<td>${escapeHtml(u.email)}</td><td>${roleLabel(u.role)}</td><td>${escapeHtml(label)}</td>`;
+        linkedBody.appendChild(tr);
+      }
+    });
+  }
+
+  function renderAgencesTab(){ renderAgencesList(); renderComptesTab(); }
+
+  /* ==========================================================
+     ONGLET INTÉRIMAIRES (admin)
+     ========================================================== */
+  document.getElementById('interimaire-form').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const nom=document.getElementById('int-nom').value.trim();
+    const prenom=document.getElementById('int-prenom').value.trim();
+    const agenceId=document.getElementById('int-agence').value;
+    if(!nom||!prenom) return;
+    await db.collection('interimaires').add({ nom, prenom, agenceId: agenceId||null, actif:true, createdAt: FieldValue.serverTimestamp() });
+    e.target.reset();
+    await refreshCaches();
+    renderInterimairesTab();
+    toast('Intérimaire ajouté');
+  });
+
+  function renderInterimairesTab(){
+    const agenceSelect = document.getElementById('int-agence');
+    agenceSelect.innerHTML = [...cache.agences.values()].map(a=>`<option value="${a.id}">${escapeHtml(a.nom)}</option>`).join('');
+    const body = document.getElementById('interimaires-body');
+    body.innerHTML='';
+    [...cache.interimaires.values()].forEach(p=>{
+      const tr = document.createElement('tr');
+      const agenceNom = cache.agences.get(p.agenceId)?.nom || '—';
+      tr.innerHTML = `<td>${escapeHtml(p.nom)}</td><td>${escapeHtml(p.prenom)}</td><td>${escapeHtml(agenceNom)}</td><td></td><td></td>`;
+      const actifBtn = document.createElement('button');
+      actifBtn.className='pill-toggle'+(p.actif?' on':'');
+      actifBtn.textContent = p.actif ? 'Actif' : 'Inactif';
+      actifBtn.addEventListener('click', async ()=>{
+        await db.collection('interimaires').doc(p.id).update({ actif: !p.actif });
+        await refreshCaches(); renderInterimairesTab();
+      });
+      tr.children[3].appendChild(actifBtn);
+      const delBtn = document.createElement('button');
+      delBtn.className='icon-btn danger'; delBtn.textContent='Supprimer';
+      delBtn.addEventListener('click', async ()=>{
+        if(!confirm(`Supprimer ${p.nom} ${p.prenom} ?`)) return;
+        await db.collection('interimaires').doc(p.id).delete();
+        await refreshCaches(); renderInterimairesTab();
+        toast('Intérimaire supprimé');
+      });
+      tr.children[4].appendChild(delBtn);
+      body.appendChild(tr);
+    });
+  }
+
+  /* ==========================================================
+     ONGLET EMPLOYÉS — liste (admin)
+     ========================================================== */
+  document.getElementById('employe-form').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const nom=document.getElementById('emp-nom').value.trim();
+    const prenom=document.getElementById('emp-prenom').value.trim();
+    if(!nom||!prenom) return;
+    await db.collection('employes').add({ nom, prenom, actif:true, createdAt: FieldValue.serverTimestamp() });
+    e.target.reset();
+    await refreshCaches();
+    renderEmployesListTable();
+    toast('Employé ajouté');
+  });
+
+  function renderEmployesListTable(){
+    const body = document.getElementById('employes-body');
+    body.innerHTML='';
+    [...cache.employes.values()].forEach(p=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML = `<td>${escapeHtml(p.nom)}</td><td>${escapeHtml(p.prenom)}</td><td></td><td></td>`;
+      const actifBtn=document.createElement('button');
+      actifBtn.className='pill-toggle'+(p.actif?' on':'');
+      actifBtn.textContent=p.actif?'Actif':'Inactif';
+      actifBtn.addEventListener('click', async ()=>{
+        await db.collection('employes').doc(p.id).update({actif:!p.actif});
+        await refreshCaches(); renderEmployesListTable();
+      });
+      tr.children[2].appendChild(actifBtn);
+      const delBtn=document.createElement('button');
+      delBtn.className='icon-btn danger'; delBtn.textContent='Supprimer';
+      delBtn.addEventListener('click', async ()=>{
+        if(!confirm(`Supprimer ${p.nom} ${p.prenom} ?`)) return;
+        await db.collection('employes').doc(p.id).delete();
+        await refreshCaches(); renderEmployesListTable();
+        toast('Employé supprimé');
+      });
+      tr.children[3].appendChild(delBtn);
+      body.appendChild(tr);
+    });
+  }
+
+  /* ==========================================================
+     CALENDRIER GÉNÉRIQUE (Intérimaires / Employés)
+     ========================================================== */
+  function createPersonCalendar(cfg){
+    let current = new Date(); current.setDate(1); current.setHours(0,0,0,0);
+    let selectedDate = null;
+
+    async function render(){
+      cfg.monthLabelEl.textContent = monthLabel(current);
+      const year=current.getFullYear(), month=current.getMonth();
+      const first = new Date(year, month, 1);
+      const last = new Date(year, month+1, 0);
+      const startStr = toDateStr(first), endStr = toDateStr(last);
+      const entriesByDate = new Map();
+      try{
+        const snap = await db.collection(cfg.pointagesCollection)
+          .where('date','>=',startStr).where('date','<=',endStr).get();
+        snap.forEach(doc=>{
+          const d = doc.data();
+          entriesByDate.set(d.date, (entriesByDate.get(d.date)||0)+1);
+        });
+      }catch(err){ console.error(err); }
+
+      cfg.gridEl.innerHTML='';
+      ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'].forEach(w=>{
+        const el=document.createElement('div'); el.className='cal-weekday'; el.textContent=w;
+        cfg.gridEl.appendChild(el);
+      });
+      const leading = (first.getDay()+6)%7;
+      for(let i=0;i<leading;i++){ const el=document.createElement('div'); el.className='cal-cell empty'; cfg.gridEl.appendChild(el); }
+      const todayStr = toDateStr(new Date());
+      for(let day=1; day<=last.getDate(); day++){
+        const ds = toDateStr(new Date(year,month,day));
+        const el=document.createElement('div');
+        el.className='cal-cell' + (ds===todayStr?' today':'') + (ds===selectedDate?' selected':'');
+        const count = entriesByDate.get(ds)||0;
+        el.innerHTML = `<span class="cal-day-num">${day}</span>` + (count? `<span class="cal-badge">${count}</span>` : '');
+        el.addEventListener('click', ()=> openDay(ds));
+        cfg.gridEl.appendChild(el);
+      }
+    }
+
+    async function openDay(ds){
+      selectedDate = ds;
+      render();
+      cfg.dayPanelEl.hidden = false;
+      cfg.dayPanelTitleEl.textContent = humanDate(fromDateStr(ds));
+      await renderDayPanel(ds);
+    }
+
+    async function renderDayPanel(ds){
+      const snap = await db.collection(cfg.pointagesCollection).where('date','==',ds).get();
+      const entries = []; snap.forEach(doc=> entries.push({id:doc.id, ...doc.data()}));
+      cfg.dayPanelBodyEl.innerHTML='';
+      entries.forEach(entry=> cfg.dayPanelBodyEl.appendChild(buildRow(ds, entry)));
+
+      if(cfg.addRowBtn){
+        cfg.addRowBtn.hidden = !cfg.canAddRemove();
+        cfg.addRowBtn.onclick = ()=>{
+          const usedIds = new Set(entries.map(e=>e.personId));
+          const available = cfg.personsSource().filter(p=> !usedIds.has(p.id));
+          if(available.length===0){ toast('Toutes les personnes disponibles sont déjà ajoutées', true); return; }
+          cfg.dayPanelBodyEl.appendChild(buildNewRow(ds, available));
+        };
+      }
+    }
+
+    function buildRow(ds, entry){
+      const person = cfg.personsSource().find(p=>p.id===entry.personId) || cache.interimaires.get(entry.personId) || cache.employes.get(entry.personId) || {nom:'(inconnu)', prenom:''};
+      const editable = cfg.canEdit();
+      const tr=document.createElement('tr');
+      const tdName=document.createElement('td'); tdName.textContent = `${person.nom} ${person.prenom||''}`.trim();
+      const tdArr=document.createElement('td'); const inArr=document.createElement('input'); inArr.type='time'; inArr.value=entry.heureArrivee||''; inArr.disabled=!editable; tdArr.appendChild(inArr);
+      const tdDep=document.createElement('td'); const inDep=document.createElement('input'); inDep.type='time'; inDep.value=entry.heureDepart||''; inDep.disabled=!editable; tdDep.appendChild(inDep);
+      const tdPause=document.createElement('td'); const inPause=document.createElement('input'); inPause.type='number'; inPause.min='0'; inPause.step='5'; inPause.value=entry.pauseMinutes||0; inPause.disabled=!editable; tdPause.appendChild(inPause);
+      const tdHeures=document.createElement('td'); tdHeures.className='heures-cell';
+      const tdActions=document.createElement('td');
+
+      function recalc(){ tdHeures.textContent = fmtHeures(computeHeures(inArr.value, inDep.value, inPause.value)); }
+      recalc();
+
+      async function save(){
+        const heures = computeHeures(inArr.value, inDep.value, inPause.value);
+        await db.collection(cfg.pointagesCollection).doc(entry.id).update({
+          heureArrivee: inArr.value||null, heureDepart: inDep.value||null,
+          pauseMinutes: Number(inPause.value)||0, heuresCalculees: heures,
+          updatedAt: FieldValue.serverTimestamp()
+        });
+        recalc();
+        render();
+        toast('Enregistré');
+      }
+      if(editable){
+        [inArr,inDep,inPause].forEach(inp=> inp.addEventListener('change', save));
+      }
+      if(cfg.canAddRemove()){
+        const delBtn=document.createElement('button'); delBtn.className='icon-btn danger'; delBtn.textContent='Suppr.';
+        delBtn.addEventListener('click', async ()=>{
+          if(!confirm('Supprimer cette ligne ?')) return;
+          await db.collection(cfg.pointagesCollection).doc(entry.id).delete();
+          renderDayPanel(ds); render();
+        });
+        tdActions.appendChild(delBtn);
+      }
+      tr.append(tdName, tdArr, tdDep, tdPause, tdHeures, tdActions);
+      return tr;
+    }
+
+    function buildNewRow(ds, available){
+      const tr=document.createElement('tr');
+      const tdName=document.createElement('td');
+      const sel=document.createElement('select');
+      sel.innerHTML = available.map(p=>`<option value="${p.id}">${escapeHtml(p.nom)} ${escapeHtml(p.prenom)}</option>`).join('');
+      tdName.appendChild(sel);
+      const tdArr=document.createElement('td'); const inArr=document.createElement('input'); inArr.type='time'; tdArr.appendChild(inArr);
+      const tdDep=document.createElement('td'); const inDep=document.createElement('input'); inDep.type='time'; tdDep.appendChild(inDep);
+      const tdPause=document.createElement('td'); const inPause=document.createElement('input'); inPause.type='number'; inPause.min='0'; inPause.step='5'; inPause.value=0; tdPause.appendChild(inPause);
+      const tdHeures=document.createElement('td'); tdHeures.textContent='—';
+      const tdActions=document.createElement('td');
+      const saveBtn=document.createElement('button'); saveBtn.className='secondary'; saveBtn.textContent='Enregistrer';
+      saveBtn.addEventListener('click', async ()=>{
+        if(!sel.value){ toast('Sélectionnez une personne', true); return; }
+        const heures = computeHeures(inArr.value, inDep.value, inPause.value);
+        await db.collection(cfg.pointagesCollection).add({
+          date: ds, personId: sel.value,
+          heureArrivee: inArr.value||null, heureDepart: inDep.value||null,
+          pauseMinutes: Number(inPause.value)||0, heuresCalculees: heures,
+          createdAt: FieldValue.serverTimestamp()
+        });
+        renderDayPanel(ds); render();
+        toast('Ajouté');
+      });
+      tdActions.appendChild(saveBtn);
+      tr.append(tdName, tdArr, tdDep, tdPause, tdHeures, tdActions);
+      return tr;
+    }
+
+    cfg.prevBtn.addEventListener('click', ()=>{ current=new Date(current.getFullYear(), current.getMonth()-1, 1); cfg.dayPanelEl.hidden=true; selectedDate=null; render(); });
+    cfg.nextBtn.addEventListener('click', ()=>{ current=new Date(current.getFullYear(), current.getMonth()+1, 1); cfg.dayPanelEl.hidden=true; selectedDate=null; render(); });
+
+    return { render, goToday: ()=>{ current=new Date(current.getFullYear(), current.getMonth(), 1); render(); } };
+  }
+
+  const calInterimaires = createPersonCalendar({
+    gridEl: document.getElementById('calendar-grid'),
+    monthLabelEl: document.getElementById('cal-month-label'),
+    prevBtn: document.getElementById('cal-prev'),
+    nextBtn: document.getElementById('cal-next'),
+    dayPanelEl: document.getElementById('day-panel'),
+    dayPanelTitleEl: document.getElementById('day-panel-title'),
+    dayPanelBodyEl: document.getElementById('day-panel-body'),
+    addRowBtn: document.getElementById('add-row-btn'),
+    personsSource: ()=> [...cache.interimaires.values()].filter(p=> p.actif && (currentUser.role!=='agence' || p.agenceId===currentUser.linkedId)),
+    pointagesCollection: 'pointages_interimaires',
+    canEdit: ()=> currentUser.role==='admin' || currentUser.role==='agence',
+    canAddRemove: ()=> currentUser.role==='admin'
+  });
+
+  const calEmployes = createPersonCalendar({
+    gridEl: document.getElementById('emp-calendar-grid'),
+    monthLabelEl: document.getElementById('emp-cal-month-label'),
+    prevBtn: document.getElementById('emp-cal-prev'),
+    nextBtn: document.getElementById('emp-cal-next'),
+    dayPanelEl: document.getElementById('emp-day-panel'),
+    dayPanelTitleEl: document.getElementById('emp-day-panel-title'),
+    dayPanelBodyEl: document.getElementById('emp-day-panel-body'),
+    addRowBtn: document.getElementById('emp-add-row-btn'),
+    personsSource: ()=> [...cache.employes.values()].filter(p=>p.actif),
+    pointagesCollection: 'pointages_employes',
+    canEdit: ()=> true,
+    canAddRemove: ()=> true
+  });
+
+  /* ==========================================================
+     RÉCAPS SEMAINE / MOIS
+     ========================================================== */
+  function getWeekRange(refDate){
+    const start = startOfWeek(refDate);
+    const end = addDays(start,6);
+    return {start,end};
+  }
+
+  let semaineRef = new Date();
+  async function renderSemaineInterimaires(){
+    const {start,end} = getWeekRange(semaineRef);
+    document.getElementById('week-label').textContent = `Semaine du ${start.toLocaleDateString('fr-FR')} au ${end.toLocaleDateString('fr-FR')}`;
+    const snap = await db.collection('pointages_interimaires').where('date','>=',toDateStr(start)).where('date','<=',toDateStr(end)).get();
+    const totals = new Map();
+    snap.forEach(doc=>{ const d=doc.data(); totals.set(d.personId, (totals.get(d.personId)||0) + (d.heuresCalculees||0)); });
+    const persons = [...cache.interimaires.values()].filter(p=>p.actif && (currentUser.role!=='agence' || p.agenceId===currentUser.linkedId));
+    const body=document.getElementById('week-body'); body.innerHTML='';
+    let grandTotal=0;
+    persons.forEach(p=>{
+      const total = totals.get(p.id)||0; grandTotal+=total;
+      const agenceNom = cache.agences.get(p.agenceId)?.nom||'—';
+      const tr=document.createElement('tr');
+      tr.innerHTML = `<td>${escapeHtml(p.nom)} ${escapeHtml(p.prenom)}</td><td>${escapeHtml(agenceNom)}</td><td>${fmtHeures(total)}</td>`;
+      body.appendChild(tr);
+    });
+    document.getElementById('week-total').innerHTML = `<strong>${fmtHeures(grandTotal)}</strong>`;
+  }
+  document.getElementById('week-prev').addEventListener('click', ()=>{ semaineRef=addDays(semaineRef,-7); renderSemaineInterimaires(); });
+  document.getElementById('week-next').addEventListener('click', ()=>{ semaineRef=addDays(semaineRef,7); renderSemaineInterimaires(); });
+
+  let empSemaineRef = new Date();
+  async function renderSemaineEmployes(){
+    const {start,end}=getWeekRange(empSemaineRef);
+    document.getElementById('emp-week-label').textContent = `Semaine du ${start.toLocaleDateString('fr-FR')} au ${end.toLocaleDateString('fr-FR')}`;
+    const snap = await db.collection('pointages_employes').where('date','>=',toDateStr(start)).where('date','<=',toDateStr(end)).get();
+    const totals=new Map();
+    snap.forEach(doc=>{const d=doc.data(); totals.set(d.personId,(totals.get(d.personId)||0)+(d.heuresCalculees||0));});
+    const persons=[...cache.employes.values()].filter(p=>p.actif);
+    const body=document.getElementById('emp-week-body'); body.innerHTML='';
+    let grand=0;
+    persons.forEach(p=>{ const t=totals.get(p.id)||0; grand+=t;
+      const tr=document.createElement('tr'); tr.innerHTML=`<td>${escapeHtml(p.nom)} ${escapeHtml(p.prenom)}</td><td>${fmtHeures(t)}</td>`; body.appendChild(tr); });
+    document.getElementById('emp-week-total').innerHTML=`<strong>${fmtHeures(grand)}</strong>`;
+  }
+  document.getElementById('emp-week-prev').addEventListener('click', ()=>{empSemaineRef=addDays(empSemaineRef,-7); renderSemaineEmployes();});
+  document.getElementById('emp-week-next').addEventListener('click', ()=>{empSemaineRef=addDays(empSemaineRef,7); renderSemaineEmployes();});
+
+  async function renderMoisEmployes(){
+    const now = new Date();
+    const year=now.getFullYear(), month=now.getMonth();
+    const first=new Date(year,month,1), last=new Date(year,month+1,0);
+    document.getElementById('emp-month-label').textContent = monthLabel(now);
+    const snap = await db.collection('pointages_employes').where('date','>=',toDateStr(first)).where('date','<=',toDateStr(last)).get();
+    const totals=new Map();
+    snap.forEach(doc=>{const d=doc.data(); totals.set(d.personId,(totals.get(d.personId)||0)+(d.heuresCalculees||0));});
+    const persons=[...cache.employes.values()].filter(p=>p.actif);
+    const body=document.getElementById('emp-month-body'); body.innerHTML='';
+    let grand=0;
+    persons.forEach(p=>{const t=totals.get(p.id)||0; grand+=t;
+      const tr=document.createElement('tr'); tr.innerHTML=`<td>${escapeHtml(p.nom)} ${escapeHtml(p.prenom)}</td><td>${fmtHeures(t)}</td>`; body.appendChild(tr);});
+    document.getElementById('emp-month-total').innerHTML=`<strong>${fmtHeures(grand)}</strong>`;
+  }
+
+  /* ==========================================================
+     MON ESPACE (employé — lecture seule)
+     ========================================================== */
+  let myCalCurrent = new Date(); myCalCurrent.setDate(1);
+  let mySelectedDate = null;
+
+  async function renderMyCalendar(){
+    document.getElementById('my-cal-month-label').textContent = monthLabel(myCalCurrent);
+    const year=myCalCurrent.getFullYear(), month=myCalCurrent.getMonth();
+    const first=new Date(year,month,1), last=new Date(year,month+1,0);
+    const datesWithEntries = new Set();
+    const snap = await db.collection('pointages_employes')
+      .where('personId','==',currentUser.linkedId)
+      .where('date','>=',toDateStr(first)).where('date','<=',toDateStr(last)).get();
+    snap.forEach(doc=> datesWithEntries.add(doc.data().date));
+
+    const grid = document.getElementById('my-calendar-grid');
+    grid.innerHTML='';
+    ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'].forEach(w=>{ const el=document.createElement('div'); el.className='cal-weekday'; el.textContent=w; grid.appendChild(el); });
+    const leading=(first.getDay()+6)%7;
+    for(let i=0;i<leading;i++){ const el=document.createElement('div'); el.className='cal-cell empty'; grid.appendChild(el); }
+    const todayStr=toDateStr(new Date());
+    for(let day=1; day<=last.getDate(); day++){
+      const ds = toDateStr(new Date(year,month,day));
+      const el=document.createElement('div');
+      el.className='cal-cell'+(ds===todayStr?' today':'')+(ds===mySelectedDate?' selected':'');
+      el.innerHTML = `<span class="cal-day-num">${day}</span>` + (datesWithEntries.has(ds)?'<span class="cal-badge">✓</span>':'');
+      el.addEventListener('click', ()=> openMyDay(ds));
+      grid.appendChild(el);
+    }
+  }
+
+  async function openMyDay(ds){
+    mySelectedDate = ds;
+    renderMyCalendar();
+    document.getElementById('my-day-panel').hidden=false;
+    document.getElementById('my-day-panel-title').textContent = humanDate(fromDateStr(ds));
+    const body = document.getElementById('my-day-panel-body');
+    body.innerHTML='';
+    const snap = await db.collection('pointages_employes')
+      .where('personId','==',currentUser.linkedId).where('date','==',ds).limit(1).get();
+    const tr=document.createElement('tr');
+    if(snap.empty){
+      tr.innerHTML = `<td colspan="4" class="muted">Aucune heure enregistrée ce jour-là.</td>`;
+    } else {
+      const d = snap.docs[0].data();
+      tr.innerHTML = `<td>${d.heureArrivee||'—'}</td><td>${d.heureDepart||'—'}</td><td>${d.pauseMinutes||0}</td><td>${fmtHeures(d.heuresCalculees)}</td>`;
+    }
+    body.appendChild(tr);
+  }
+
+  document.getElementById('my-cal-prev').addEventListener('click', ()=>{ myCalCurrent=new Date(myCalCurrent.getFullYear(),myCalCurrent.getMonth()-1,1); document.getElementById('my-day-panel').hidden=true; mySelectedDate=null; renderMyCalendar(); });
+  document.getElementById('my-cal-next').addEventListener('click', ()=>{ myCalCurrent=new Date(myCalCurrent.getFullYear(),myCalCurrent.getMonth()+1,1); document.getElementById('my-day-panel').hidden=true; mySelectedDate=null; renderMyCalendar(); });
+
+  let myWeekRef = new Date();
+  async function renderMyWeek(){
+    const {start,end}=getWeekRange(myWeekRef);
+    document.getElementById('my-week-label').textContent = `Semaine du ${start.toLocaleDateString('fr-FR')} au ${end.toLocaleDateString('fr-FR')}`;
+    const snap = await db.collection('pointages_employes')
+      .where('personId','==',currentUser.linkedId)
+      .where('date','>=',toDateStr(start)).where('date','<=',toDateStr(end)).get();
+    let total=0; snap.forEach(doc=> total += doc.data().heuresCalculees||0);
+    document.getElementById('my-week-total').textContent = `Total : ${fmtHeures(total)}`;
+  }
+  document.getElementById('my-week-prev').addEventListener('click', ()=>{ myWeekRef=addDays(myWeekRef,-7); renderMyWeek(); });
+  document.getElementById('my-week-next').addEventListener('click', ()=>{ myWeekRef=addDays(myWeekRef,7); renderMyWeek(); });
+
+  async function renderMyMonth(){
+    const now=new Date();
+    document.getElementById('my-month-label').textContent = monthLabel(now);
+    const first=new Date(now.getFullYear(),now.getMonth(),1), last=new Date(now.getFullYear(),now.getMonth()+1,0);
+    const snap = await db.collection('pointages_employes')
+      .where('personId','==',currentUser.linkedId)
+      .where('date','>=',toDateStr(first)).where('date','<=',toDateStr(last)).get();
+    let total=0; snap.forEach(doc=> total+=doc.data().heuresCalculees||0);
+    document.getElementById('my-month-total').textContent = `Total : ${fmtHeures(total)}`;
+  }
+
+  function renderMonEspace(){ renderMyCalendar(); renderMyWeek(); renderMyMonth(); }
+
+  /* ==========================================================
+     INITIALISATION APRÈS CONNEXION
+     ========================================================== */
+  async function initApp(){
+    await refreshCaches();
+    renderAgencesTab();
+    renderInterimairesTab();
+    renderEmployesListTable();
+    calInterimaires.goToday();
+    calEmployes.goToday();
+    renderSemaineInterimaires();
+    renderSemaineEmployes();
+    renderMoisEmployes();
+    if(currentUser.role==='employe') renderMonEspace();
+  }
+
+  initTabs();
+  completeEmailLinkSignIn();
+  </script>
+</body>
+</html>
