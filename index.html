@@ -1035,8 +1035,8 @@
       const editable = cfg.canEdit();
       const tr=document.createElement('tr');
       const tdName=document.createElement('td'); tdName.textContent = `${person.nom} ${person.prenom||''}`.trim();
-      const tdArr=document.createElement('td'); const inArr=document.createElement('input'); inArr.type='time'; inArr.step='900'; inArr.value=entry.heureArrivee||''; inArr.disabled=!editable; tdArr.appendChild(inArr);
-      const tdDep=document.createElement('td'); const inDep=document.createElement('input'); inDep.type='time'; inDep.step='900'; inDep.value=entry.heureDepart||''; inDep.disabled=!editable; tdDep.appendChild(inDep);
+      const tdArr=document.createElement('td'); const inArr=document.createElement('input'); inArr.type='time'; inArr.step='300'; inArr.value=entry.heureArrivee||''; inArr.disabled=!editable; tdArr.appendChild(inArr);
+      const tdDep=document.createElement('td'); const inDep=document.createElement('input'); inDep.type='time'; inDep.step='300'; inDep.value=entry.heureDepart||''; inDep.disabled=!editable; tdDep.appendChild(inDep);
       const tdPause=document.createElement('td'); const inPause=document.createElement('input'); inPause.type='number'; inPause.min='0'; inPause.step='5'; inPause.value=entry.pauseMinutes||0; inPause.disabled=!editable; tdPause.appendChild(inPause);
       const tdHeures=document.createElement('td'); tdHeures.className='heures-cell';
       const tdActions=document.createElement('td');
@@ -1077,8 +1077,8 @@
       const sel=document.createElement('select');
       sel.innerHTML = available.map(p=>`<option value="${p.id}">${escapeHtml(p.nom)} ${escapeHtml(p.prenom)}</option>`).join('');
       tdName.appendChild(sel);
-      const tdArr=document.createElement('td'); const inArr=document.createElement('input'); inArr.type='time'; inArr.step='900'; tdArr.appendChild(inArr);
-      const tdDep=document.createElement('td'); const inDep=document.createElement('input'); inDep.type='time'; inDep.step='900'; tdDep.appendChild(inDep);
+      const tdArr=document.createElement('td'); const inArr=document.createElement('input'); inArr.type='time'; inArr.step='300'; tdArr.appendChild(inArr);
+      const tdDep=document.createElement('td'); const inDep=document.createElement('input'); inDep.type='time'; inDep.step='300'; tdDep.appendChild(inDep);
       const tdPause=document.createElement('td'); const inPause=document.createElement('input'); inPause.type='number'; inPause.min='0'; inPause.step='5'; inPause.value=0; tdPause.appendChild(inPause);
       const tdHeures=document.createElement('td'); tdHeures.textContent='—';
       const tdActions=document.createElement('td');
@@ -1257,8 +1257,8 @@
     }
 
     const tr=document.createElement('tr');
-    const tdArr=document.createElement('td'); const inArr=document.createElement('input'); inArr.type='time'; inArr.step='900'; inArr.value=data.heureArrivee||''; tdArr.appendChild(inArr);
-    const tdDep=document.createElement('td'); const inDep=document.createElement('input'); inDep.type='time'; inDep.step='900'; inDep.value=data.heureDepart||''; tdDep.appendChild(inDep);
+    const tdArr=document.createElement('td'); const inArr=document.createElement('input'); inArr.type='time'; inArr.step='300'; inArr.value=data.heureArrivee||''; tdArr.appendChild(inArr);
+    const tdDep=document.createElement('td'); const inDep=document.createElement('input'); inDep.type='time'; inDep.step='300'; inDep.value=data.heureDepart||''; tdDep.appendChild(inDep);
     const tdPause=document.createElement('td'); const inPause=document.createElement('input'); inPause.type='number'; inPause.min='0'; inPause.step='5'; inPause.value=data.pauseMinutes||0; tdPause.appendChild(inPause);
     const tdHeures=document.createElement('td'); tdHeures.className='heures-cell';
 
