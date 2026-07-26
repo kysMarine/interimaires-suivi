@@ -65,6 +65,9 @@
   button.icon-btn:hover{background:#F0F2F1; color:var(--color-ink);}
   button.icon-btn.danger{color:var(--color-danger); border-color:#EAD2CA;}
   button.icon-btn.danger:hover{background:var(--color-danger-bg);}
+  button.icon-btn.warn{color:#8A6A2E; border-color:#E8D4B0;}
+  button.icon-btn.warn:hover{background:#FBF2E3;}
+  .absent-tag{color:#8A6A2E !important;}
 
   input, select{
     font-family:inherit;
@@ -196,6 +199,9 @@
     font-weight:700;
   }
   .data-table input[type="time"], .data-table input[type="number"]{width:100%; min-width:70px;}
+  .time-select{ display:inline-flex; align-items:center; gap:2px; }
+  .time-select select{ padding:.4em .2em; min-width:52px; }
+  .time-select-sep{ color:var(--color-muted); font-weight:700; }
   .data-table select{width:100%;}
   .heures-cell{font-weight:700; color:var(--color-primary-dark);}
   .tab-content{overflow-x:auto;}
@@ -541,6 +547,32 @@
     const totalMin = Math.round(h*60);
     const hh = Math.floor(totalMin/60), mm = totalMin%60;
     return mm ? `${hh}h${pad2(mm)}` : `${hh}h`;
+  }
+  function createTimeSelects(initialValue){
+    const wrap = document.createElement('span');
+    wrap.className = 'time-select';
+    const hourSel = document.createElement('select');
+    hourSel.innerHTML = '<option value="">--</option>' + Array.from({length:24}, (_,h)=>`<option value="${pad2(h)}">${pad2(h)}</option>`).join('');
+    const sep = document.createElement('span'); sep.textContent = ':'; sep.className = 'time-select-sep';
+    const minSel = document.createElement('select');
+    minSel.innerHTML = '<option value="">--</option>' + Array.from({length:12}, (_,i)=>pad2(i*5)).map(m=>`<option value="${m}">${m}</option>`).join('');
+    wrap.append(hourSel, sep, minSel);
+
+    function applyValue(v){
+      if(!v){ hourSel.value=''; minSel.value=''; return; }
+      const [h,m] = v.split(':');
+      hourSel.value = h;
+      minSel.value = pad2((Math.round(Number(m)/5)*5) % 60);
+    }
+    applyValue(initialValue);
+
+    return {
+      wrap,
+      get value(){ return (hourSel.value && minSel.value) ? `${hourSel.value}:${minSel.value}` : ''; },
+      set value(v){ applyValue(v); },
+      set disabled(d){ hourSel.disabled = d; minSel.disabled = d; },
+      addEventListener(evt, cb){ hourSel.addEventListener(evt, cb); minSel.addEventListener(evt, cb); }
+    };
   }
   function startOfWeek(d){
     const day=(d.getDay()+6)%7;
@@ -1035,20 +1067,27 @@
       const editable = cfg.canEdit();
       const tr=document.createElement('tr');
       const tdName=document.createElement('td'); tdName.textContent = `${person.nom} ${person.prenom||''}`.trim();
-      const tdArr=document.createElement('td'); const inArr=document.createElement('input'); inArr.type='time'; inArr.step='300'; inArr.value=entry.heureArrivee||''; inArr.disabled=!editable; tdArr.appendChild(inArr);
-      const tdDep=document.createElement('td'); const inDep=document.createElement('input'); inDep.type='time'; inDep.step='300'; inDep.value=entry.heureDepart||''; inDep.disabled=!editable; tdDep.appendChild(inDep);
+      const tdArr=document.createElement('td'); const inArr=createTimeSelects(entry.heureArrivee); inArr.disabled=!editable; tdArr.appendChild(inArr.wrap);
+      const tdDep=document.createElement('td'); const inDep=createTimeSelects(entry.heureDepart); inDep.disabled=!editable; tdDep.appendChild(inDep.wrap);
       const tdPause=document.createElement('td'); const inPause=document.createElement('input'); inPause.type='number'; inPause.min='0'; inPause.step='5'; inPause.value=entry.pauseMinutes||0; inPause.disabled=!editable; tdPause.appendChild(inPause);
       const tdHeures=document.createElement('td'); tdHeures.className='heures-cell';
       const tdActions=document.createElement('td');
 
-      function recalc(){ tdHeures.textContent = fmtHeures(computeHeures(inArr.value, inDep.value, inPause.value)); }
+      function recalc(){
+        const stillAbsent = entry.absent && !inArr.value && !inDep.value;
+        tdHeures.textContent = stillAbsent ? 'Absent' : fmtHeures(computeHeures(inArr.value, inDep.value, inPause.value));
+        tdHeures.classList.toggle('absent-tag', stillAbsent);
+      }
       recalc();
 
       async function save(){
-        const heures = computeHeures(inArr.value, inDep.value, inPause.value);
+        const nowAbsent = !!entry.absent && !inArr.value && !inDep.value;
+        entry.absent = nowAbsent;
+        const heures = nowAbsent ? 0 : computeHeures(inArr.value, inDep.value, inPause.value);
         await db.collection(cfg.pointagesCollection).doc(entry.id).update({
           heureArrivee: inArr.value||null, heureDepart: inDep.value||null,
           pauseMinutes: Number(inPause.value)||0, heuresCalculees: heures,
+          absent: nowAbsent,
           updatedAt: FieldValue.serverTimestamp()
         });
         recalc();
@@ -1077,11 +1116,28 @@
       const sel=document.createElement('select');
       sel.innerHTML = available.map(p=>`<option value="${p.id}">${escapeHtml(p.nom)} ${escapeHtml(p.prenom)}</option>`).join('');
       tdName.appendChild(sel);
-      const tdArr=document.createElement('td'); const inArr=document.createElement('input'); inArr.type='time'; inArr.step='300'; tdArr.appendChild(inArr);
-      const tdDep=document.createElement('td'); const inDep=document.createElement('input'); inDep.type='time'; inDep.step='300'; tdDep.appendChild(inDep);
+      const tdArr=document.createElement('td'); const inArr=createTimeSelects(''); tdArr.appendChild(inArr.wrap);
+      const tdDep=document.createElement('td'); const inDep=createTimeSelects(''); tdDep.appendChild(inDep.wrap);
       const tdPause=document.createElement('td'); const inPause=document.createElement('input'); inPause.type='number'; inPause.min='0'; inPause.step='5'; inPause.value=0; tdPause.appendChild(inPause);
       const tdHeures=document.createElement('td'); tdHeures.textContent='—';
       const tdActions=document.createElement('td');
+      const absentBtn=document.createElement('button'); absentBtn.type='button'; absentBtn.className='icon-btn warn'; absentBtn.textContent='Absent';
+      absentBtn.addEventListener('click', async ()=>{
+        if(!sel.value){ toast('Sélectionnez une personne', true); return; }
+        try{
+          await db.collection(cfg.pointagesCollection).add({
+            date: ds, personId: sel.value,
+            heureArrivee: null, heureDepart: null,
+            pauseMinutes: 0, heuresCalculees: 0, absent: true,
+            createdAt: FieldValue.serverTimestamp()
+          });
+          renderDayPanel(ds); render();
+          toast('Marqué absent');
+        }catch(err){
+          console.error(err);
+          toast('Erreur : ' + err.message, true);
+        }
+      });
       const saveBtn=document.createElement('button'); saveBtn.className='secondary'; saveBtn.textContent='Enregistrer';
       saveBtn.addEventListener('click', async ()=>{
         if(!sel.value){ toast('Sélectionnez une personne', true); return; }
@@ -1090,12 +1146,13 @@
           date: ds, personId: sel.value,
           heureArrivee: inArr.value||null, heureDepart: inDep.value||null,
           pauseMinutes: Number(inPause.value)||0, heuresCalculees: heures,
+          absent: false,
           createdAt: FieldValue.serverTimestamp()
         });
         renderDayPanel(ds); render();
         toast('Ajouté');
       });
-      tdActions.appendChild(saveBtn);
+      tdActions.append(absentBtn, saveBtn);
       tr.append(tdName, tdArr, tdDep, tdPause, tdHeures, tdActions);
       return tr;
     }
@@ -1257,8 +1314,8 @@
     }
 
     const tr=document.createElement('tr');
-    const tdArr=document.createElement('td'); const inArr=document.createElement('input'); inArr.type='time'; inArr.step='300'; inArr.value=data.heureArrivee||''; tdArr.appendChild(inArr);
-    const tdDep=document.createElement('td'); const inDep=document.createElement('input'); inDep.type='time'; inDep.step='300'; inDep.value=data.heureDepart||''; tdDep.appendChild(inDep);
+    const tdArr=document.createElement('td'); const inArr=createTimeSelects(data.heureArrivee); tdArr.appendChild(inArr.wrap);
+    const tdDep=document.createElement('td'); const inDep=createTimeSelects(data.heureDepart); tdDep.appendChild(inDep.wrap);
     const tdPause=document.createElement('td'); const inPause=document.createElement('input'); inPause.type='number'; inPause.min='0'; inPause.step='5'; inPause.value=data.pauseMinutes||0; tdPause.appendChild(inPause);
     const tdHeures=document.createElement('td'); tdHeures.className='heures-cell';
 
