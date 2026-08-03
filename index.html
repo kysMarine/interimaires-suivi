@@ -68,6 +68,11 @@
   button.icon-btn.warn{color:#8A6A2E; border-color:#E8D4B0;}
   button.icon-btn.warn:hover{background:#FBF2E3;}
   .absent-tag{color:#8A6A2E !important;}
+  .copy-panel{ background:#F7F5EF; border-radius:8px; padding:.8em 1em; }
+  .copy-panel-list{ display:flex; flex-wrap:wrap; gap:.5em 1.4em; margin:.4em 0; }
+  .copy-panel-item{ display:flex; align-items:center; gap:.35em; font-size:.88rem; cursor:pointer; font-weight:400; }
+  .copy-panel-item input{ cursor:pointer; }
+  .copy-panel button{ margin-right:.5em; }
 
   input, select{
     font-family:inherit;
@@ -437,7 +442,12 @@
         <tfoot><tr><td><strong>Total général</strong></td><td id="emp-week-total"><strong>0</strong></td></tr></tfoot>
       </table>
 
-      <h2>Récap mois <span id="emp-month-label" class="muted"></span></h2>
+      <h2>Récap mois</h2>
+      <div class="calendar-nav">
+        <button id="emp-month-prev" class="secondary">&larr;</button>
+        <h2 id="emp-month-label"></h2>
+        <button id="emp-month-next" class="secondary">&rarr;</button>
+      </div>
       <table class="data-table">
         <thead><tr><th>Employé</th><th>Total heures (mois)</th></tr></thead>
         <tbody id="emp-month-body"></tbody>
@@ -490,7 +500,12 @@
       </div>
       <p id="my-week-total" class="muted"></p>
 
-      <h2>Récap mois <span id="my-month-label" class="muted"></span></h2>
+      <h2>Récap mois</h2>
+      <div class="calendar-nav">
+        <button id="my-month-prev" class="secondary">&larr;</button>
+        <h2 id="my-month-label"></h2>
+        <button id="my-month-next" class="secondary">&rarr;</button>
+      </div>
       <p id="my-month-total" class="muted"></p>
     </section>
   </div>
@@ -1094,17 +1109,71 @@
         render();
         toast('Enregistré');
       }
+      tr.dataset.personId = entry.personId;
+
       if(editable){
         [inArr,inDep,inPause].forEach(inp=> inp.addEventListener('change', save));
       }
       if(cfg.canAddRemove()){
+        const copyBtn=document.createElement('button'); copyBtn.type='button'; copyBtn.className='icon-btn'; copyBtn.textContent='Copier à...';
+        copyBtn.addEventListener('click', ()=>{
+          const nextRow = tr.nextElementSibling;
+          if(nextRow && nextRow.classList.contains('copy-panel-row')){ nextRow.remove(); return; }
+          cfg.dayPanelBodyEl.querySelectorAll('.copy-panel-row').forEach(r=> r.remove());
+
+          const presentIds = new Set([...cfg.dayPanelBodyEl.querySelectorAll('tr[data-person-id]')].map(r=> r.dataset.personId));
+          const targets = cfg.personsSource().filter(p=> !presentIds.has(p.id));
+          if(targets.length===0){ toast('Tout le monde a déjà une ligne ce jour-là', true); return; }
+
+          const panelTr = document.createElement('tr'); panelTr.className='copy-panel-row';
+          const td = document.createElement('td'); td.colSpan = 6; td.className='copy-panel';
+          const title = document.createElement('p'); title.className='muted';
+          title.style.margin = '0 0 .5em 0';
+          title.textContent = `Copier ${inArr.value||'--:--'} → ${inDep.value||'--:--'} (pause ${inPause.value||0} min) vers :`;
+          const list = document.createElement('div'); list.className='copy-panel-list';
+          const checkboxes = targets.map(p=>{
+            const label = document.createElement('label'); label.className='copy-panel-item';
+            const cb = document.createElement('input'); cb.type='checkbox'; cb.value=p.id;
+            label.append(cb, document.createTextNode(` ${p.nom} ${p.prenom}`));
+            list.appendChild(label);
+            return cb;
+          });
+          const actions = document.createElement('div'); actions.style.marginTop = '.6em';
+          const allBtn = document.createElement('button'); allBtn.type='button'; allBtn.className='secondary'; allBtn.textContent='Tout cocher';
+          allBtn.addEventListener('click', ()=> checkboxes.forEach(cb=> cb.checked = true));
+          const applyBtn = document.createElement('button'); applyBtn.type='button'; applyBtn.textContent='Copier vers la sélection';
+          applyBtn.addEventListener('click', async ()=>{
+            const selected = checkboxes.filter(cb=>cb.checked).map(cb=>cb.value);
+            if(selected.length===0){ toast('Coche au moins une personne', true); return; }
+            try{
+              await Promise.all(selected.map(personId=> db.collection(cfg.pointagesCollection).add({
+                date: ds, personId,
+                heureArrivee: inArr.value||null, heureDepart: inDep.value||null,
+                pauseMinutes: Number(inPause.value)||0,
+                heuresCalculees: computeHeures(inArr.value, inDep.value, inPause.value),
+                absent: false,
+                createdAt: FieldValue.serverTimestamp()
+              })));
+              toast(`Heures copiées à ${selected.length} personne(s)`);
+              renderDayPanel(ds); render();
+            }catch(err){
+              console.error(err);
+              toast('Erreur : ' + err.message, true);
+            }
+          });
+          actions.append(allBtn, applyBtn);
+          td.append(title, list, actions);
+          panelTr.appendChild(td);
+          tr.after(panelTr);
+        });
+
         const delBtn=document.createElement('button'); delBtn.className='icon-btn danger'; delBtn.textContent='Suppr.';
         delBtn.addEventListener('click', async ()=>{
           if(!confirm('Supprimer cette ligne ?')) return;
           await db.collection(cfg.pointagesCollection).doc(entry.id).delete();
           renderDayPanel(ds); render();
         });
-        tdActions.appendChild(delBtn);
+        tdActions.append(copyBtn, delBtn);
       }
       tr.append(tdName, tdArr, tdDep, tdPause, tdHeures, tdActions);
       return tr;
@@ -1241,11 +1310,11 @@
   document.getElementById('emp-week-prev').addEventListener('click', ()=>{empSemaineRef=addDays(empSemaineRef,-7); renderSemaineEmployes();});
   document.getElementById('emp-week-next').addEventListener('click', ()=>{empSemaineRef=addDays(empSemaineRef,7); renderSemaineEmployes();});
 
+  let empMoisRef = new Date();
   async function renderMoisEmployes(){
-    const now = new Date();
-    const year=now.getFullYear(), month=now.getMonth();
+    const year=empMoisRef.getFullYear(), month=empMoisRef.getMonth();
     const first=new Date(year,month,1), last=new Date(year,month+1,0);
-    document.getElementById('emp-month-label').textContent = monthLabel(now);
+    document.getElementById('emp-month-label').textContent = monthLabel(empMoisRef);
     const snap = await db.collection('pointages_employes').where('date','>=',toDateStr(first)).where('date','<=',toDateStr(last)).get();
     const totals=new Map();
     snap.forEach(doc=>{const d=doc.data(); totals.set(d.personId,(totals.get(d.personId)||0)+(d.heuresCalculees||0));});
@@ -1256,6 +1325,8 @@
       const tr=document.createElement('tr'); tr.innerHTML=`<td>${escapeHtml(p.nom)} ${escapeHtml(p.prenom)}</td><td>${fmtHeures(t)}</td>`; body.appendChild(tr);});
     document.getElementById('emp-month-total').innerHTML=`<strong>${fmtHeures(grand)}</strong>`;
   }
+  document.getElementById('emp-month-prev').addEventListener('click', ()=>{ empMoisRef=new Date(empMoisRef.getFullYear(), empMoisRef.getMonth()-1, 1); renderMoisEmployes(); });
+  document.getElementById('emp-month-next').addEventListener('click', ()=>{ empMoisRef=new Date(empMoisRef.getFullYear(), empMoisRef.getMonth()+1, 1); renderMoisEmployes(); });
 
   /* ==========================================================
      MON ESPACE (employé — lecture seule)
@@ -1370,10 +1441,10 @@
   document.getElementById('my-week-prev').addEventListener('click', ()=>{ myWeekRef=addDays(myWeekRef,-7); renderMyWeek(); });
   document.getElementById('my-week-next').addEventListener('click', ()=>{ myWeekRef=addDays(myWeekRef,7); renderMyWeek(); });
 
+  let myMoisRef = new Date();
   async function renderMyMonth(){
-    const now=new Date();
-    document.getElementById('my-month-label').textContent = monthLabel(now);
-    const first=new Date(now.getFullYear(),now.getMonth(),1), last=new Date(now.getFullYear(),now.getMonth()+1,0);
+    document.getElementById('my-month-label').textContent = monthLabel(myMoisRef);
+    const first=new Date(myMoisRef.getFullYear(),myMoisRef.getMonth(),1), last=new Date(myMoisRef.getFullYear(),myMoisRef.getMonth()+1,0);
     try{
       const snap = await db.collection('pointages_employes')
         .where('personId','==',currentUser.linkedId)
@@ -1385,6 +1456,8 @@
       document.getElementById('my-month-total').textContent = `Erreur : ${err.message}`;
     }
   }
+  document.getElementById('my-month-prev').addEventListener('click', ()=>{ myMoisRef=new Date(myMoisRef.getFullYear(), myMoisRef.getMonth()-1, 1); renderMyMonth(); });
+  document.getElementById('my-month-next').addEventListener('click', ()=>{ myMoisRef=new Date(myMoisRef.getFullYear(), myMoisRef.getMonth()+1, 1); renderMyMonth(); });
 
   function renderMonEspace(){ renderMyCalendar(); renderMyWeek(); renderMyMonth(); }
 
