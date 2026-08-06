@@ -98,7 +98,7 @@
     text-transform:uppercase; letter-spacing:.03em; margin-bottom:.3rem; font-weight:700;
   }
   .entry-card-time-field .time-select{ width:100%; }
-  .entry-card-time-field .time-select select{ flex:1; min-width:0; }
+  .entry-card-time-field .time-select .time-picker-btn{ width:100%; font-size:1rem; padding:.55em .6em; }
   .entry-card-pause{
     display:flex; align-items:center; gap:.7rem; margin-bottom:.8rem;
   }
@@ -243,9 +243,34 @@
     font-weight:700;
   }
   .data-table input[type="time"], .data-table input[type="number"]{width:100%; min-width:70px;}
-  .time-select{ display:inline-flex; align-items:center; gap:2px; }
-  .time-select select{ padding:.4em .2em; min-width:52px; }
-  .time-select-sep{ color:var(--color-muted); font-weight:700; }
+  .time-select{ position:relative; display:block; }
+  .time-picker-btn{
+    width:100%; text-align:left;
+    padding:.4em .5em;
+    background:#fff; border:1px solid var(--color-border); border-radius:8px;
+    font-family:inherit; font-size:.95rem; color:var(--color-ink);
+    cursor:pointer;
+  }
+  .time-picker-btn:hover{ border-color:#C7D3D0; }
+  .time-picker-panel{
+    position:absolute; top:calc(100% + 4px); left:0; right:0;
+    display:flex; gap:1px;
+    background:var(--color-surface);
+    border:1px solid var(--color-border); border-radius:8px;
+    box-shadow:var(--shadow);
+    z-index:30; overflow:hidden;
+  }
+  .time-picker-col{
+    flex:1; max-height:180px; overflow-y:auto;
+    display:flex; flex-direction:column;
+  }
+  .time-picker-opt{
+    background:transparent; border:none; border-radius:0;
+    padding:.5em .3em; font-size:.88rem; text-align:center;
+    color:var(--color-ink); cursor:pointer;
+  }
+  .time-picker-opt:hover{ background:#F0F2F1; }
+  .time-picker-opt.selected{ background:var(--color-primary); color:#fff; font-weight:700; }
   .data-table select{width:100%;}
   .heures-cell{font-weight:700; color:var(--color-primary-dark);}
   .tab-content{overflow-x:auto;}
@@ -599,27 +624,73 @@
   function createTimeSelects(initialValue){
     const wrap = document.createElement('span');
     wrap.className = 'time-select';
-    const hourSel = document.createElement('select');
-    hourSel.innerHTML = '<option value="">--</option>' + Array.from({length:24}, (_,h)=>`<option value="${pad2(h)}">${pad2(h)}</option>`).join('');
-    const sep = document.createElement('span'); sep.textContent = ':'; sep.className = 'time-select-sep';
-    const minSel = document.createElement('select');
-    minSel.innerHTML = '<option value="">--</option>' + Array.from({length:12}, (_,i)=>pad2(i*5)).map(m=>`<option value="${m}">${m}</option>`).join('');
-    wrap.append(hourSel, sep, minSel);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'time-picker-btn';
+
+    const panel = document.createElement('div');
+    panel.className = 'time-picker-panel';
+    panel.hidden = true;
+    const hourCol = document.createElement('div'); hourCol.className='time-picker-col';
+    const minCol = document.createElement('div'); minCol.className='time-picker-col';
+    panel.append(hourCol, minCol);
+
+    wrap.append(btn, panel);
+
+    let hh = '', mm = '';
+    const listeners = [];
+    function fireChange(){ listeners.forEach(cb=> cb()); }
+
+    function renderCols(){
+      hourCol.innerHTML = '';
+      for(let h=0; h<24; h++){
+        const hv = pad2(h);
+        const o = document.createElement('button'); o.type='button'; o.textContent = hv;
+        o.className = 'time-picker-opt' + (hv===hh ? ' selected' : '');
+        o.addEventListener('click', ()=>{ hh = hv; renderCols(); afterSelect(); });
+        hourCol.appendChild(o);
+      }
+      minCol.innerHTML = '';
+      for(let m=0; m<60; m+=5){
+        const mv = pad2(m);
+        const o = document.createElement('button'); o.type='button'; o.textContent = mv;
+        o.className = 'time-picker-opt' + (mv===mm ? ' selected' : '');
+        o.addEventListener('click', ()=>{ mm = mv; renderCols(); afterSelect(); });
+        minCol.appendChild(o);
+      }
+      btn.textContent = (hh && mm) ? `${hh}:${mm}` : '--:--';
+    }
+
+    function afterSelect(){
+      if(hh && mm){ closePanel(); fireChange(); }
+    }
+    function openPanel(){
+      panel.hidden = false;
+      const selH = hourCol.querySelector('.selected'); if(selH) selH.scrollIntoView({block:'center'});
+      const selM = minCol.querySelector('.selected'); if(selM) selM.scrollIntoView({block:'center'});
+    }
+    function closePanel(){ panel.hidden = true; }
+    btn.addEventListener('click', ()=>{ panel.hidden ? openPanel() : closePanel(); });
+    document.addEventListener('click', (e)=>{ if(!wrap.contains(e.target)) closePanel(); });
 
     function applyValue(v){
-      if(!v){ hourSel.value=''; minSel.value='00'; return; }
-      const [h,m] = v.split(':');
-      hourSel.value = h;
-      minSel.value = pad2((Math.round(Number(m)/5)*5) % 60);
+      if(!v){ hh=''; mm=''; }
+      else{
+        const [h,m] = v.split(':');
+        hh = h;
+        mm = pad2((Math.round(Number(m)/5)*5) % 60);
+      }
+      renderCols();
     }
     applyValue(initialValue);
 
     return {
       wrap,
-      get value(){ return (hourSel.value && minSel.value) ? `${hourSel.value}:${minSel.value}` : ''; },
+      get value(){ return (hh && mm) ? `${hh}:${mm}` : ''; },
       set value(v){ applyValue(v); },
-      set disabled(d){ hourSel.disabled = d; minSel.disabled = d; },
-      addEventListener(evt, cb){ hourSel.addEventListener(evt, cb); minSel.addEventListener(evt, cb); }
+      set disabled(d){ btn.disabled = d; },
+      addEventListener(evt, cb){ if(evt==='change') listeners.push(cb); }
     };
   }
   function buildTimesRow(labelArr, inArr, labelDep, inDep){
@@ -642,8 +713,8 @@
     function refresh(){ valueEl.textContent = getPause() + ' min'; }
     refresh();
     if(editable){
-      minusBtn.addEventListener('click', ()=>{ setPause(Math.max(0, getPause()-5)); refresh(); onChange(); });
-      plusBtn.addEventListener('click', ()=>{ setPause(Math.min(600, getPause()+5)); refresh(); onChange(); });
+      minusBtn.addEventListener('click', ()=>{ setPause(Math.max(0, getPause()-15)); refresh(); onChange(); });
+      plusBtn.addEventListener('click', ()=>{ setPause(Math.min(600, getPause()+15)); refresh(); onChange(); });
     } else {
       minusBtn.disabled = true; plusBtn.disabled = true;
     }
