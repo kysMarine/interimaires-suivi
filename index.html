@@ -1008,29 +1008,71 @@
     agenceSelect.innerHTML = [...cache.agences.values()].map(a=>`<option value="${a.id}">${escapeHtml(a.nom)}</option>`).join('');
     const body = document.getElementById('interimaires-body');
     body.innerHTML='';
-    [...cache.interimaires.values()].forEach(p=>{
-      const tr = document.createElement('tr');
-      const agenceNom = cache.agences.get(p.agenceId)?.nom || '—';
-      tr.innerHTML = `<td>${escapeHtml(p.nom)}</td><td>${escapeHtml(p.prenom)}</td><td>${escapeHtml(agenceNom)}</td><td></td><td></td>`;
-      const actifBtn = document.createElement('button');
-      actifBtn.className='pill-toggle'+(p.actif?' on':'');
-      actifBtn.textContent = p.actif ? 'Actif' : 'Inactif';
-      actifBtn.addEventListener('click', async ()=>{
-        await db.collection('interimaires').doc(p.id).update({ actif: !p.actif });
-        await refreshCaches(); renderInterimairesTab();
-      });
-      tr.children[3].appendChild(actifBtn);
-      const delBtn = document.createElement('button');
-      delBtn.className='icon-btn danger'; delBtn.textContent='Supprimer';
-      delBtn.addEventListener('click', async ()=>{
-        if(!confirm(`Supprimer ${p.nom} ${p.prenom} ?`)) return;
-        await db.collection('interimaires').doc(p.id).delete();
-        await refreshCaches(); renderInterimairesTab();
-        toast('Intérimaire supprimé');
-      });
-      tr.children[4].appendChild(delBtn);
-      body.appendChild(tr);
+    [...cache.interimaires.values()].forEach(p=> body.appendChild(buildInterimaireRow(p)));
+  }
+
+  function buildInterimaireRow(p){
+    const tr = document.createElement('tr');
+    const tdNom = document.createElement('td'); tdNom.textContent = p.nom;
+    const tdPrenom = document.createElement('td'); tdPrenom.textContent = p.prenom;
+    const tdAgence = document.createElement('td'); tdAgence.textContent = cache.agences.get(p.agenceId)?.nom || '—';
+    const tdActif = document.createElement('td');
+    const tdActions = document.createElement('td');
+
+    const actifBtn = document.createElement('button');
+    actifBtn.className='pill-toggle'+(p.actif?' on':'');
+    actifBtn.textContent = p.actif ? 'Actif' : 'Inactif';
+    actifBtn.addEventListener('click', async ()=>{
+      await db.collection('interimaires').doc(p.id).update({ actif: !p.actif });
+      await refreshCaches(); renderInterimairesTab();
     });
+    tdActif.appendChild(actifBtn);
+
+    const editBtn = document.createElement('button'); editBtn.className='icon-btn'; editBtn.textContent='Modifier';
+    editBtn.addEventListener('click', enterEditMode);
+
+    const delBtn = document.createElement('button');
+    delBtn.className='icon-btn danger'; delBtn.textContent='Supprimer';
+    delBtn.addEventListener('click', async ()=>{
+      if(!confirm(`Supprimer ${p.nom} ${p.prenom} ?\n\nLes heures déjà enregistrées pour cette personne resteront dans l'historique.`)) return;
+      await db.collection('interimaires').doc(p.id).delete();
+      await refreshCaches(); renderInterimairesTab();
+      toast('Intérimaire supprimé');
+    });
+
+    tdActions.append(editBtn, delBtn);
+    tr.append(tdNom, tdPrenom, tdAgence, tdActif, tdActions);
+
+    function enterEditMode(){
+      tdNom.innerHTML=''; tdPrenom.innerHTML=''; tdAgence.innerHTML='';
+      const inNom = document.createElement('input'); inNom.type='text'; inNom.value=p.nom; tdNom.appendChild(inNom);
+      const inPrenom = document.createElement('input'); inPrenom.type='text'; inPrenom.value=p.prenom; tdPrenom.appendChild(inPrenom);
+      const selAgence = document.createElement('select');
+      selAgence.innerHTML = [...cache.agences.values()].map(a=>`<option value="${a.id}">${escapeHtml(a.nom)}</option>`).join('');
+      selAgence.value = p.agenceId || '';
+      tdAgence.appendChild(selAgence);
+
+      tdActions.innerHTML='';
+      const saveBtn = document.createElement('button'); saveBtn.className='secondary'; saveBtn.textContent='Enregistrer';
+      saveBtn.addEventListener('click', async ()=>{
+        const nom = inNom.value.trim(), prenom = inPrenom.value.trim();
+        if(!nom || !prenom){ toast('Nom et prénom requis', true); return; }
+        try{
+          await db.collection('interimaires').doc(p.id).update({ nom, prenom, agenceId: selAgence.value || null });
+          toast('Fiche mise à jour — les heures déjà enregistrées ne sont pas modifiées');
+          await refreshCaches();
+          renderInterimairesTab();
+        }catch(err){
+          console.error(err);
+          toast('Erreur : ' + err.message, true);
+        }
+      });
+      const cancelBtn = document.createElement('button'); cancelBtn.className='icon-btn'; cancelBtn.textContent='Annuler';
+      cancelBtn.addEventListener('click', renderInterimairesTab);
+      tdActions.append(saveBtn, cancelBtn);
+    }
+
+    return tr;
   }
 
   /* ==========================================================
