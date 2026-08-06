@@ -338,6 +338,10 @@
 
     <!-- Onglet Récap semaine -->
     <section id="tab-semaine" class="tab-content" hidden>
+      <div class="inline-form manager-only" id="week-agence-filter-wrap" hidden>
+        <label for="week-agence-filter" class="muted">Filtrer par agence :</label>
+        <select id="week-agence-filter"><option value="">Toutes les agences</option></select>
+      </div>
       <div class="calendar-nav">
         <button id="week-prev" class="secondary">&larr;</button>
         <h2 id="week-label"></h2>
@@ -356,6 +360,30 @@
           <tr>
             <td colspan="2"><strong>Total général</strong></td>
             <td id="week-total"><strong>0</strong></td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <h2>Récap mois</h2>
+      <p class="muted">Inclut les intérimaires inactifs ayant travaillé ce mois-ci.</p>
+      <div class="calendar-nav">
+        <button id="mois-interim-prev" class="secondary">&larr;</button>
+        <h2 id="mois-interim-label"></h2>
+        <button id="mois-interim-next" class="secondary">&rarr;</button>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Intérimaire</th>
+            <th>Agence</th>
+            <th>Total heures (mois)</th>
+          </tr>
+        </thead>
+        <tbody id="mois-interim-body"></tbody>
+        <tfoot>
+          <tr>
+            <td colspan="2"><strong>Total général</strong></td>
+            <td id="mois-interim-total"><strong>0</strong></td>
           </tr>
         </tfoot>
       </table>
@@ -574,7 +602,7 @@
     wrap.append(hourSel, sep, minSel);
 
     function applyValue(v){
-      if(!v){ hourSel.value=''; minSel.value=''; return; }
+      if(!v){ hourSel.value=''; minSel.value='00'; return; }
       const [h,m] = v.split(':');
       hourSel.value = h;
       minSel.value = pad2((Math.round(Number(m)/5)*5) % 60);
@@ -651,9 +679,46 @@
       btn.addEventListener('click', ()=> switchTab(btn.dataset.tab));
     });
   }
+  let appReady = false;
   function switchTab(tab){
     document.querySelectorAll('.tab-btn').forEach(b=> b.classList.toggle('active', b.dataset.tab===tab));
     document.querySelectorAll('.tab-content').forEach(s=> s.hidden = (s.id !== 'tab-'+tab));
+    if(appReady) refreshTabData(tab);
+  }
+  async function refreshTabData(tab){
+    try{
+      await refreshCaches();
+      switch(tab){
+        case 'calendrier':
+          calInterimaires.render();
+          break;
+        case 'semaine':
+          populateWeekAgenceFilter();
+          renderSemaineInterimaires();
+          renderMoisInterimaires();
+          break;
+        case 'interimaires':
+          renderInterimairesTab();
+          break;
+        case 'agences':
+          renderAgencesTab();
+          break;
+        case 'employes':
+          calEmployes.render();
+          renderSemaineEmployes();
+          renderMoisEmployes();
+          renderEmployesListTable();
+          break;
+        case 'utilisateurs':
+          renderUtilisateursTab();
+          break;
+        case 'mon-espace':
+          renderMonEspace();
+          break;
+      }
+    }catch(err){
+      console.error(err);
+    }
   }
   function applyRoleUI(role){
     document.querySelectorAll('.admin-only').forEach(el=> el.hidden = role!=='admin');
@@ -737,7 +802,7 @@
   document.getElementById('pending-logout').addEventListener('click', ()=> auth.signOut());
 
   auth.onAuthStateChanged(async (user)=>{
-    if(!user){ currentUser=null; showScreen('login'); return; }
+    if(!user){ currentUser=null; appReady=false; showScreen('login'); return; }
     const ref = db.collection('users').doc(user.uid);
     let snap = await ref.get();
     if(!snap.exists){
@@ -811,7 +876,7 @@
     });
   }
 
-  function renderAgencesTab(){ renderAgencesList(); }
+  function renderAgencesTab(){ renderAgencesList(); populateWeekAgenceFilter(); }
 
   /* ==========================================================
      ONGLET UTILISATEURS (admin) — valider / refuser les comptes
@@ -1271,6 +1336,14 @@
     return {start,end};
   }
 
+  function populateWeekAgenceFilter(){
+    const sel = document.getElementById('week-agence-filter');
+    const current = sel.value;
+    sel.innerHTML = '<option value="">Toutes les agences</option>' + [...cache.agences.values()].map(a=>`<option value="${a.id}">${escapeHtml(a.nom)}</option>`).join('');
+    if([...sel.options].some(o=>o.value===current)) sel.value = current;
+  }
+  document.getElementById('week-agence-filter').addEventListener('change', ()=>{ renderSemaineInterimaires(); renderMoisInterimaires(); });
+
   let semaineRef = new Date();
   async function renderSemaineInterimaires(){
     const {start,end} = getWeekRange(semaineRef);
@@ -1278,7 +1351,14 @@
     const snap = await db.collection('pointages_interimaires').where('date','>=',toDateStr(start)).where('date','<=',toDateStr(end)).get();
     const totals = new Map();
     snap.forEach(doc=>{ const d=doc.data(); totals.set(d.personId, (totals.get(d.personId)||0) + (d.heuresCalculees||0)); });
-    const persons = [...cache.interimaires.values()].filter(p=>p.actif && (currentUser.role!=='agence' || p.agenceId===currentUser.linkedId));
+    const filterAgenceId = document.getElementById('week-agence-filter').value;
+    const persons = [...cache.interimaires.values()].filter(p=>{
+      if(!totals.has(p.id)) return false;
+      if(!p.actif) return false;
+      if(currentUser.role==='agence') return p.agenceId===currentUser.linkedId;
+      if(filterAgenceId) return p.agenceId===filterAgenceId;
+      return true;
+    });
     const body=document.getElementById('week-body'); body.innerHTML='';
     let grandTotal=0;
     persons.forEach(p=>{
@@ -1293,6 +1373,39 @@
   document.getElementById('week-prev').addEventListener('click', ()=>{ semaineRef=addDays(semaineRef,-7); renderSemaineInterimaires(); });
   document.getElementById('week-next').addEventListener('click', ()=>{ semaineRef=addDays(semaineRef,7); renderSemaineInterimaires(); });
 
+  let moisInterimRef = new Date();
+  async function renderMoisInterimaires(){
+    const year=moisInterimRef.getFullYear(), month=moisInterimRef.getMonth();
+    const first=new Date(year,month,1), last=new Date(year,month+1,0);
+    document.getElementById('mois-interim-label').textContent = monthLabel(moisInterimRef);
+    const snap = await db.collection('pointages_interimaires').where('date','>=',toDateStr(first)).where('date','<=',toDateStr(last)).get();
+    const totals = new Map();
+    snap.forEach(doc=>{ const d=doc.data(); totals.set(d.personId, (totals.get(d.personId)||0) + (d.heuresCalculees||0)); });
+    const filterAgenceId = document.getElementById('week-agence-filter').value;
+    const body = document.getElementById('mois-interim-body'); body.innerHTML='';
+    let grandTotal=0;
+    [...totals.entries()]
+      .map(([personId,total])=> ({ personId, total, person: cache.interimaires.get(personId) }))
+      .filter(({person})=>{
+        if(!person) return true;
+        if(currentUser.role==='agence') return person.agenceId===currentUser.linkedId;
+        if(filterAgenceId) return person.agenceId===filterAgenceId;
+        return true;
+      })
+      .sort((a,b)=> (a.person?.nom||'').localeCompare(b.person?.nom||''))
+      .forEach(({total,person})=>{
+        grandTotal += total;
+        const nom = person ? `${person.nom} ${person.prenom}` : '(intérimaire supprimé)';
+        const agenceNom = person ? (cache.agences.get(person.agenceId)?.nom || '—') : '—';
+        const tr=document.createElement('tr');
+        tr.innerHTML = `<td>${escapeHtml(nom)}</td><td>${escapeHtml(agenceNom)}</td><td>${fmtHeures(total)}</td>`;
+        body.appendChild(tr);
+      });
+    document.getElementById('mois-interim-total').innerHTML = `<strong>${fmtHeures(grandTotal)}</strong>`;
+  }
+  document.getElementById('mois-interim-prev').addEventListener('click', ()=>{ moisInterimRef=new Date(moisInterimRef.getFullYear(), moisInterimRef.getMonth()-1, 1); renderMoisInterimaires(); });
+  document.getElementById('mois-interim-next').addEventListener('click', ()=>{ moisInterimRef=new Date(moisInterimRef.getFullYear(), moisInterimRef.getMonth()+1, 1); renderMoisInterimaires(); });
+
   let empSemaineRef = new Date();
   async function renderSemaineEmployes(){
     const {start,end}=getWeekRange(empSemaineRef);
@@ -1300,7 +1413,7 @@
     const snap = await db.collection('pointages_employes').where('date','>=',toDateStr(start)).where('date','<=',toDateStr(end)).get();
     const totals=new Map();
     snap.forEach(doc=>{const d=doc.data(); totals.set(d.personId,(totals.get(d.personId)||0)+(d.heuresCalculees||0));});
-    const persons=[...cache.employes.values()].filter(p=>p.actif);
+    const persons=[...cache.employes.values()].filter(p=>p.actif && totals.has(p.id));
     const body=document.getElementById('emp-week-body'); body.innerHTML='';
     let grand=0;
     persons.forEach(p=>{ const t=totals.get(p.id)||0; grand+=t;
@@ -1318,7 +1431,7 @@
     const snap = await db.collection('pointages_employes').where('date','>=',toDateStr(first)).where('date','<=',toDateStr(last)).get();
     const totals=new Map();
     snap.forEach(doc=>{const d=doc.data(); totals.set(d.personId,(totals.get(d.personId)||0)+(d.heuresCalculees||0));});
-    const persons=[...cache.employes.values()].filter(p=>p.actif);
+    const persons=[...cache.employes.values()].filter(p=>p.actif && totals.has(p.id));
     const body=document.getElementById('emp-month-body'); body.innerHTML='';
     let grand=0;
     persons.forEach(p=>{const t=totals.get(p.id)||0; grand+=t;
@@ -1465,6 +1578,7 @@
      INITIALISATION APRÈS CONNEXION
      ========================================================== */
   async function initApp(){
+    appReady = false;
     await refreshCaches();
     if(currentUser.role==='admin'){
       renderAgencesTab();
@@ -1479,9 +1593,12 @@
     }
     if(currentUser.role!=='employe'){
       calInterimaires.goToday();
+      populateWeekAgenceFilter();
       renderSemaineInterimaires();
+      renderMoisInterimaires();
     }
     if(currentUser.role==='employe') renderMonEspace();
+    appReady = true;
   }
 
   initTabs();
