@@ -74,6 +74,45 @@
   .copy-panel-item input{ cursor:pointer; }
   .copy-panel button{ margin-right:.5em; }
 
+  .cards-list{ display:flex; flex-direction:column; gap:.7rem; }
+  .entry-card{
+    background:var(--color-surface);
+    border:1px solid var(--color-border);
+    border-radius:12px;
+    padding:.9rem 1rem;
+    box-shadow:var(--shadow);
+  }
+  .entry-card-header{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:.7rem; gap:.5rem;
+  }
+  .entry-card-name{ font-weight:700; font-size:.98rem; }
+  .entry-card-actions{ display:flex; gap:.4rem; flex-shrink:0; }
+  .entry-card-person-select{ width:100%; margin-bottom:.7rem; font-size:.95rem; padding:.6em .65em; }
+  .entry-card-times{
+    display:grid; grid-template-columns:1fr 1fr; gap:.7rem;
+    margin-bottom:.8rem;
+  }
+  .entry-card-time-field label{
+    display:block; font-size:.72rem; color:var(--color-muted);
+    text-transform:uppercase; letter-spacing:.03em; margin-bottom:.3rem; font-weight:700;
+  }
+  .entry-card-time-field .time-select{ width:100%; }
+  .entry-card-time-field .time-select select{ flex:1; min-width:0; }
+  .entry-card-pause{
+    display:flex; align-items:center; gap:.7rem; margin-bottom:.8rem;
+  }
+  .entry-card-pause-label{ font-size:.72rem; color:var(--color-muted); text-transform:uppercase; letter-spacing:.03em; font-weight:700; }
+  .entry-card-pause button{ width:38px; height:38px; padding:0; font-size:1.15rem; line-height:1; flex-shrink:0; }
+  .entry-card-pause-value{ flex:1; text-align:center; font-weight:700; }
+  .entry-card-footer{
+    display:flex; align-items:center; justify-content:space-between;
+    border-top:1px solid var(--color-border); padding-top:.6rem;
+  }
+  .entry-card-total{ font-size:1.2rem; font-weight:700; color:var(--color-primary-dark); }
+  .entry-card-buttons{ display:flex; gap:.5rem; margin-top:.8rem; }
+  .entry-card-buttons button{ flex:1; }
+
   input, select{
     font-family:inherit;
     font-size:.92rem;
@@ -319,19 +358,7 @@
 
       <div id="day-panel" class="day-panel" hidden>
         <h3 id="day-panel-title"></h3>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Intérimaire</th>
-              <th>Heure d'arrivée</th>
-              <th>Heure de départ</th>
-              <th>Pause (min)</th>
-              <th>Heures de travail (calculées)</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="day-panel-body"></tbody>
-        </table>
+        <div id="day-panel-body" class="cards-list"></div>
         <button type="button" id="add-row-btn" class="secondary add-row-btn admin-only" hidden>+ Ajouter un intérimaire</button>
       </div>
     </section>
@@ -442,19 +469,7 @@
 
       <div id="emp-day-panel" class="day-panel" hidden>
         <h3 id="emp-day-panel-title"></h3>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Employé</th>
-              <th>Heure d'arrivée</th>
-              <th>Heure de départ</th>
-              <th>Pause (min)</th>
-              <th>Heures de travail (calculées)</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="emp-day-panel-body"></tbody>
-        </table>
+        <div id="emp-day-panel-body" class="cards-list"></div>
         <button type="button" id="emp-add-row-btn" class="secondary add-row-btn">+ Ajouter un employé</button>
       </div>
 
@@ -507,17 +522,7 @@
 
       <div id="my-day-panel" class="day-panel" hidden>
         <h3 id="my-day-panel-title"></h3>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Heure d'arrivée</th>
-              <th>Heure de départ</th>
-              <th>Pause (min)</th>
-              <th>Heures de travail</th>
-            </tr>
-          </thead>
-          <tbody id="my-day-panel-body"></tbody>
-        </table>
+        <div id="my-day-panel-body" class="cards-list"></div>
       </div>
 
       <h2>Récap semaine</h2>
@@ -616,6 +621,34 @@
       set disabled(d){ hourSel.disabled = d; minSel.disabled = d; },
       addEventListener(evt, cb){ hourSel.addEventListener(evt, cb); minSel.addEventListener(evt, cb); }
     };
+  }
+  function buildTimesRow(labelArr, inArr, labelDep, inDep){
+    const timesRow = document.createElement('div'); timesRow.className='entry-card-times';
+    const arrField = document.createElement('div'); arrField.className='entry-card-time-field';
+    const arrLabel = document.createElement('label'); arrLabel.textContent = labelArr;
+    arrField.append(arrLabel, inArr.wrap);
+    const depField = document.createElement('div'); depField.className='entry-card-time-field';
+    const depLabel = document.createElement('label'); depLabel.textContent = labelDep;
+    depField.append(depLabel, inDep.wrap);
+    timesRow.append(arrField, depField);
+    return timesRow;
+  }
+  function buildPauseRow(getPause, setPause, onChange, editable){
+    const pauseRow = document.createElement('div'); pauseRow.className='entry-card-pause';
+    const label = document.createElement('span'); label.className='entry-card-pause-label'; label.textContent='Pause';
+    const minusBtn = document.createElement('button'); minusBtn.type='button'; minusBtn.className='secondary'; minusBtn.textContent='−'; minusBtn.setAttribute('aria-label','Réduire la pause');
+    const valueEl = document.createElement('div'); valueEl.className='entry-card-pause-value';
+    const plusBtn = document.createElement('button'); plusBtn.type='button'; plusBtn.className='secondary'; plusBtn.textContent='+'; plusBtn.setAttribute('aria-label','Augmenter la pause');
+    function refresh(){ valueEl.textContent = getPause() + ' min'; }
+    refresh();
+    if(editable){
+      minusBtn.addEventListener('click', ()=>{ setPause(Math.max(0, getPause()-5)); refresh(); onChange(); });
+      plusBtn.addEventListener('click', ()=>{ setPause(Math.min(600, getPause()+5)); refresh(); onChange(); });
+    } else {
+      minusBtn.disabled = true; plusBtn.disabled = true;
+    }
+    pauseRow.append(label, minusBtn, valueEl, plusBtn);
+    return { el: pauseRow, refresh };
   }
   function startOfWeek(d){
     const day=(d.getDay()+6)%7;
@@ -1187,28 +1220,38 @@
     function buildRow(ds, entry){
       const person = cfg.personsSource().find(p=>p.id===entry.personId) || cache.interimaires.get(entry.personId) || cache.employes.get(entry.personId) || {nom:'(inconnu)', prenom:''};
       const editable = cfg.canEdit();
-      const tr=document.createElement('tr');
-      const tdName=document.createElement('td'); tdName.textContent = `${person.nom} ${person.prenom||''}`.trim();
-      const tdArr=document.createElement('td'); const inArr=createTimeSelects(entry.heureArrivee); inArr.disabled=!editable; tdArr.appendChild(inArr.wrap);
-      const tdDep=document.createElement('td'); const inDep=createTimeSelects(entry.heureDepart); inDep.disabled=!editable; tdDep.appendChild(inDep.wrap);
-      const tdPause=document.createElement('td'); const inPause=document.createElement('input'); inPause.type='number'; inPause.min='0'; inPause.step='5'; inPause.value=entry.pauseMinutes||0; inPause.disabled=!editable; tdPause.appendChild(inPause);
-      const tdHeures=document.createElement('td'); tdHeures.className='heures-cell';
-      const tdActions=document.createElement('td');
+      const card = document.createElement('div'); card.className='entry-card';
+      card.dataset.personId = entry.personId;
+
+      const header = document.createElement('div'); header.className='entry-card-header';
+      const nameEl = document.createElement('div'); nameEl.className='entry-card-name'; nameEl.textContent = `${person.nom} ${person.prenom||''}`.trim();
+      const actions = document.createElement('div'); actions.className='entry-card-actions';
+      header.append(nameEl, actions);
+
+      const inArr=createTimeSelects(entry.heureArrivee); inArr.disabled=!editable;
+      const inDep=createTimeSelects(entry.heureDepart); inDep.disabled=!editable;
+      const timesRow = buildTimesRow('Arrivée', inArr, 'Départ', inDep);
+
+      let pauseMinutes = entry.pauseMinutes || 0;
+
+      const footer = document.createElement('div'); footer.className='entry-card-footer';
+      const footerLabel = document.createElement('span'); footerLabel.className='muted'; footerLabel.style.fontSize='.82rem'; footerLabel.textContent='Total';
+      const totalEl = document.createElement('span'); totalEl.className='entry-card-total';
+      footer.append(footerLabel, totalEl);
 
       function recalc(){
         const stillAbsent = entry.absent && !inArr.value && !inDep.value;
-        tdHeures.textContent = stillAbsent ? 'Absent' : fmtHeures(computeHeures(inArr.value, inDep.value, inPause.value));
-        tdHeures.classList.toggle('absent-tag', stillAbsent);
+        totalEl.textContent = stillAbsent ? 'Absent' : fmtHeures(computeHeures(inArr.value, inDep.value, pauseMinutes));
+        totalEl.classList.toggle('absent-tag', stillAbsent);
       }
-      recalc();
 
       async function save(){
         const nowAbsent = !!entry.absent && !inArr.value && !inDep.value;
         entry.absent = nowAbsent;
-        const heures = nowAbsent ? 0 : computeHeures(inArr.value, inDep.value, inPause.value);
+        const heures = nowAbsent ? 0 : computeHeures(inArr.value, inDep.value, pauseMinutes);
         await db.collection(cfg.pointagesCollection).doc(entry.id).update({
           heureArrivee: inArr.value||null, heureDepart: inDep.value||null,
-          pauseMinutes: Number(inPause.value)||0, heuresCalculees: heures,
+          pauseMinutes, heuresCalculees: heures,
           absent: nowAbsent,
           updatedAt: FieldValue.serverTimestamp()
         });
@@ -1216,27 +1259,30 @@
         render();
         toast('Enregistré');
       }
-      tr.dataset.personId = entry.personId;
+
+      const pause = buildPauseRow(()=>pauseMinutes, v=>{pauseMinutes=v;}, save, editable);
+      recalc();
 
       if(editable){
-        [inArr,inDep,inPause].forEach(inp=> inp.addEventListener('change', save));
+        inArr.addEventListener('change', save);
+        inDep.addEventListener('change', save);
       }
+
       if(cfg.canAddRemove()){
         const copyBtn=document.createElement('button'); copyBtn.type='button'; copyBtn.className='icon-btn'; copyBtn.textContent='Copier à...';
         copyBtn.addEventListener('click', ()=>{
-          const nextRow = tr.nextElementSibling;
-          if(nextRow && nextRow.classList.contains('copy-panel-row')){ nextRow.remove(); return; }
-          cfg.dayPanelBodyEl.querySelectorAll('.copy-panel-row').forEach(r=> r.remove());
+          const nextEl = card.nextElementSibling;
+          if(nextEl && nextEl.classList.contains('copy-panel')){ nextEl.remove(); return; }
+          cfg.dayPanelBodyEl.querySelectorAll('.copy-panel').forEach(el=> el.remove());
 
-          const presentIds = new Set([...cfg.dayPanelBodyEl.querySelectorAll('tr[data-person-id]')].map(r=> r.dataset.personId));
+          const presentIds = new Set([...cfg.dayPanelBodyEl.querySelectorAll('.entry-card[data-person-id]')].map(el=> el.dataset.personId));
           const targets = cfg.personsSource().filter(p=> !presentIds.has(p.id));
           if(targets.length===0){ toast('Tout le monde a déjà une ligne ce jour-là', true); return; }
 
-          const panelTr = document.createElement('tr'); panelTr.className='copy-panel-row';
-          const td = document.createElement('td'); td.colSpan = 6; td.className='copy-panel';
+          const panel = document.createElement('div'); panel.className='copy-panel';
           const title = document.createElement('p'); title.className='muted';
           title.style.margin = '0 0 .5em 0';
-          title.textContent = `Copier ${inArr.value||'--:--'} → ${inDep.value||'--:--'} (pause ${inPause.value||0} min) vers :`;
+          title.textContent = `Copier ${inArr.value||'--:--'} → ${inDep.value||'--:--'} (pause ${pauseMinutes} min) vers :`;
           const list = document.createElement('div'); list.className='copy-panel-list';
           const checkboxes = targets.map(p=>{
             const label = document.createElement('label'); label.className='copy-panel-item';
@@ -1245,7 +1291,7 @@
             list.appendChild(label);
             return cb;
           });
-          const actions = document.createElement('div'); actions.style.marginTop = '.6em';
+          const btnRow = document.createElement('div'); btnRow.style.marginTop = '.6em';
           const allBtn = document.createElement('button'); allBtn.type='button'; allBtn.className='secondary'; allBtn.textContent='Tout cocher';
           allBtn.addEventListener('click', ()=> checkboxes.forEach(cb=> cb.checked = true));
           const applyBtn = document.createElement('button'); applyBtn.type='button'; applyBtn.textContent='Copier vers la sélection';
@@ -1256,8 +1302,8 @@
               await Promise.all(selected.map(personId=> db.collection(cfg.pointagesCollection).add({
                 date: ds, personId,
                 heureArrivee: inArr.value||null, heureDepart: inDep.value||null,
-                pauseMinutes: Number(inPause.value)||0,
-                heuresCalculees: computeHeures(inArr.value, inDep.value, inPause.value),
+                pauseMinutes,
+                heuresCalculees: computeHeures(inArr.value, inDep.value, pauseMinutes),
                 absent: false,
                 createdAt: FieldValue.serverTimestamp()
               })));
@@ -1268,10 +1314,9 @@
               toast('Erreur : ' + err.message, true);
             }
           });
-          actions.append(allBtn, applyBtn);
-          td.append(title, list, actions);
-          panelTr.appendChild(td);
-          tr.after(panelTr);
+          btnRow.append(allBtn, applyBtn);
+          panel.append(title, list, btnRow);
+          card.after(panel);
         });
 
         const delBtn=document.createElement('button'); delBtn.className='icon-btn danger'; delBtn.textContent='Suppr.';
@@ -1280,23 +1325,35 @@
           await db.collection(cfg.pointagesCollection).doc(entry.id).delete();
           renderDayPanel(ds); render();
         });
-        tdActions.append(copyBtn, delBtn);
+        actions.append(copyBtn, delBtn);
       }
-      tr.append(tdName, tdArr, tdDep, tdPause, tdHeures, tdActions);
-      return tr;
+      card.append(header, timesRow, pause.el, footer);
+      return card;
     }
 
     function buildNewRow(ds, available){
-      const tr=document.createElement('tr');
-      const tdName=document.createElement('td');
-      const sel=document.createElement('select');
+      const card = document.createElement('div'); card.className='entry-card';
+      const sel=document.createElement('select'); sel.className='entry-card-person-select';
       sel.innerHTML = available.map(p=>`<option value="${p.id}">${escapeHtml(p.nom)} ${escapeHtml(p.prenom)}</option>`).join('');
-      tdName.appendChild(sel);
-      const tdArr=document.createElement('td'); const inArr=createTimeSelects(''); tdArr.appendChild(inArr.wrap);
-      const tdDep=document.createElement('td'); const inDep=createTimeSelects(''); tdDep.appendChild(inDep.wrap);
-      const tdPause=document.createElement('td'); const inPause=document.createElement('input'); inPause.type='number'; inPause.min='0'; inPause.step='5'; inPause.value=0; tdPause.appendChild(inPause);
-      const tdHeures=document.createElement('td'); tdHeures.textContent='—';
-      const tdActions=document.createElement('td');
+
+      const inArr=createTimeSelects('');
+      const inDep=createTimeSelects('');
+      const timesRow = buildTimesRow('Arrivée', inArr, 'Départ', inDep);
+
+      let pauseMinutes = 0;
+
+      const footer = document.createElement('div'); footer.className='entry-card-footer';
+      const footerLabel = document.createElement('span'); footerLabel.className='muted'; footerLabel.style.fontSize='.82rem'; footerLabel.textContent='Total';
+      const totalEl = document.createElement('span'); totalEl.className='entry-card-total'; totalEl.textContent='—';
+      footer.append(footerLabel, totalEl);
+
+      function recalc(){ totalEl.textContent = fmtHeures(computeHeures(inArr.value, inDep.value, pauseMinutes)); }
+      const pause = buildPauseRow(()=>pauseMinutes, v=>{pauseMinutes=v;}, recalc, true);
+      inArr.addEventListener('change', recalc);
+      inDep.addEventListener('change', recalc);
+      recalc();
+
+      const btnRow = document.createElement('div'); btnRow.className='entry-card-buttons';
       const absentBtn=document.createElement('button'); absentBtn.type='button'; absentBtn.className='icon-btn warn'; absentBtn.textContent='Absent';
       absentBtn.addEventListener('click', async ()=>{
         if(!sel.value){ toast('Sélectionnez une personne', true); return; }
@@ -1314,23 +1371,28 @@
           toast('Erreur : ' + err.message, true);
         }
       });
-      const saveBtn=document.createElement('button'); saveBtn.className='secondary'; saveBtn.textContent='Enregistrer';
+      const saveBtn=document.createElement('button'); saveBtn.textContent='Enregistrer';
       saveBtn.addEventListener('click', async ()=>{
         if(!sel.value){ toast('Sélectionnez une personne', true); return; }
-        const heures = computeHeures(inArr.value, inDep.value, inPause.value);
-        await db.collection(cfg.pointagesCollection).add({
-          date: ds, personId: sel.value,
-          heureArrivee: inArr.value||null, heureDepart: inDep.value||null,
-          pauseMinutes: Number(inPause.value)||0, heuresCalculees: heures,
-          absent: false,
-          createdAt: FieldValue.serverTimestamp()
-        });
-        renderDayPanel(ds); render();
-        toast('Ajouté');
+        const heures = computeHeures(inArr.value, inDep.value, pauseMinutes);
+        try{
+          await db.collection(cfg.pointagesCollection).add({
+            date: ds, personId: sel.value,
+            heureArrivee: inArr.value||null, heureDepart: inDep.value||null,
+            pauseMinutes, heuresCalculees: heures,
+            absent: false,
+            createdAt: FieldValue.serverTimestamp()
+          });
+          renderDayPanel(ds); render();
+          toast('Ajouté');
+        }catch(err){
+          console.error(err);
+          toast('Erreur : ' + err.message, true);
+        }
       });
-      tdActions.append(absentBtn, saveBtn);
-      tr.append(tdName, tdArr, tdDep, tdPause, tdHeures, tdActions);
-      return tr;
+      btnRow.append(absentBtn, saveBtn);
+      card.append(sel, timesRow, pause.el, footer, btnRow);
+      return card;
     }
 
     cfg.prevBtn.addEventListener('click', ()=>{ current=new Date(current.getFullYear(), current.getMonth()-1, 1); cfg.dayPanelEl.hidden=true; selectedDate=null; render(); });
@@ -1535,25 +1597,30 @@
       if(!snap.empty){ docId = snap.docs[0].id; data = snap.docs[0].data(); }
     }catch(err){
       console.error(err);
-      body.innerHTML = `<tr><td colspan="4" class="message error">Erreur : ${escapeHtml(err.message)}</td></tr>`;
+      body.innerHTML = `<p class="message error">Erreur : ${escapeHtml(err.message)}</p>`;
       return;
     }
 
-    const tr=document.createElement('tr');
-    const tdArr=document.createElement('td'); const inArr=createTimeSelects(data.heureArrivee); tdArr.appendChild(inArr.wrap);
-    const tdDep=document.createElement('td'); const inDep=createTimeSelects(data.heureDepart); tdDep.appendChild(inDep.wrap);
-    const tdPause=document.createElement('td'); const inPause=document.createElement('input'); inPause.type='number'; inPause.min='0'; inPause.step='5'; inPause.value=data.pauseMinutes||0; tdPause.appendChild(inPause);
-    const tdHeures=document.createElement('td'); tdHeures.className='heures-cell';
+    const card = document.createElement('div'); card.className='entry-card';
+    const inArr=createTimeSelects(data.heureArrivee);
+    const inDep=createTimeSelects(data.heureDepart);
+    const timesRow = buildTimesRow('Arrivée', inArr, 'Départ', inDep);
 
-    function recalc(){ tdHeures.textContent = fmtHeures(computeHeures(inArr.value, inDep.value, inPause.value)); }
-    recalc();
+    let pauseMinutes = data.pauseMinutes || 0;
+
+    const footer = document.createElement('div'); footer.className='entry-card-footer';
+    const footerLabel = document.createElement('span'); footerLabel.className='muted'; footerLabel.style.fontSize='.82rem'; footerLabel.textContent='Total';
+    const totalEl = document.createElement('span'); totalEl.className='entry-card-total';
+    footer.append(footerLabel, totalEl);
+
+    function recalc(){ totalEl.textContent = fmtHeures(computeHeures(inArr.value, inDep.value, pauseMinutes)); }
 
     async function save(){
-      const heures = computeHeures(inArr.value, inDep.value, inPause.value);
+      const heures = computeHeures(inArr.value, inDep.value, pauseMinutes);
       const payload = {
         date: ds, personId: currentUser.linkedId,
         heureArrivee: inArr.value||null, heureDepart: inDep.value||null,
-        pauseMinutes: Number(inPause.value)||0, heuresCalculees: heures
+        pauseMinutes, heuresCalculees: heures
       };
       try{
         if(docId){
@@ -1570,9 +1637,12 @@
         toast("Erreur d'enregistrement : " + err.message, true);
       }
     }
-    [inArr,inDep,inPause].forEach(inp=> inp.addEventListener('change', save));
-    tr.append(tdArr, tdDep, tdPause, tdHeures);
-    body.appendChild(tr);
+    const pause = buildPauseRow(()=>pauseMinutes, v=>{pauseMinutes=v;}, save, true);
+    recalc();
+    inArr.addEventListener('change', save);
+    inDep.addEventListener('change', save);
+    card.append(timesRow, pause.el, footer);
+    body.appendChild(card);
   }
 
   document.getElementById('my-cal-prev').addEventListener('click', ()=>{ myCalCurrent=new Date(myCalCurrent.getFullYear(),myCalCurrent.getMonth()-1,1); document.getElementById('my-day-panel').hidden=true; mySelectedDate=null; renderMyCalendar(); });
