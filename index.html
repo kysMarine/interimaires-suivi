@@ -642,24 +642,37 @@
     const listeners = [];
     function fireChange(){ listeners.forEach(cb=> cb()); }
 
-    function renderCols(){
-      hourCol.innerHTML = '';
-      for(let h=0; h<24; h++){
-        const hv = pad2(h);
-        const o = document.createElement('button'); o.type='button'; o.textContent = hv;
-        o.className = 'time-picker-opt' + (hv===hh ? ' selected' : '');
-        o.addEventListener('click', ()=>{ hh = hv; renderCols(); afterSelect(); });
-        hourCol.appendChild(o);
-      }
-      minCol.innerHTML = '';
-      for(let m=0; m<60; m+=5){
-        const mv = pad2(m);
-        const o = document.createElement('button'); o.type='button'; o.textContent = mv;
-        o.className = 'time-picker-opt' + (mv===mm ? ' selected' : '');
-        o.addEventListener('click', ()=>{ mm = mv; renderCols(); afterSelect(); });
-        minCol.appendChild(o);
-      }
-      btn.textContent = (hh && mm) ? `${hh}:${mm}` : '--:--';
+    function updateBtnLabel(){ btn.textContent = (hh && mm) ? `${hh}:${mm}` : '--:--'; }
+
+    for(let h=0; h<24; h++){
+      const hv = pad2(h);
+      const o = document.createElement('button'); o.type='button'; o.textContent = hv; o.dataset.v = hv;
+      o.addEventListener('click', ()=>{
+        hh = hv;
+        hourCol.querySelectorAll('.time-picker-opt').forEach(x=> x.classList.toggle('selected', x===o));
+        updateBtnLabel();
+        afterSelect();
+      });
+      o.className = 'time-picker-opt';
+      hourCol.appendChild(o);
+    }
+    for(let m=0; m<60; m+=5){
+      const mv = pad2(m);
+      const o = document.createElement('button'); o.type='button'; o.textContent = mv; o.dataset.v = mv;
+      o.addEventListener('click', ()=>{
+        mm = mv;
+        minCol.querySelectorAll('.time-picker-opt').forEach(x=> x.classList.toggle('selected', x===o));
+        updateBtnLabel();
+        afterSelect();
+      });
+      o.className = 'time-picker-opt';
+      minCol.appendChild(o);
+    }
+
+    function syncSelected(){
+      hourCol.querySelectorAll('.time-picker-opt').forEach(o=> o.classList.toggle('selected', o.dataset.v===hh));
+      minCol.querySelectorAll('.time-picker-opt').forEach(o=> o.classList.toggle('selected', o.dataset.v===mm));
+      updateBtnLabel();
     }
 
     function afterSelect(){
@@ -681,7 +694,7 @@
         hh = h;
         mm = pad2((Math.round(Number(m)/5)*5) % 60);
       }
-      renderCols();
+      syncSelected();
     }
     applyValue(initialValue);
 
