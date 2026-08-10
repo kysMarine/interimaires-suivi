@@ -113,6 +113,24 @@
   .entry-card-buttons{ display:flex; gap:.5rem; margin-top:.8rem; }
   .entry-card-buttons button{ flex:1; }
 
+  .chips-list{ display:flex; flex-wrap:wrap; gap:.5rem; margin-bottom:1rem; }
+  .chip{
+    display:inline-flex; align-items:center; gap:.5rem;
+    background:#EEF3F2; border:1px solid var(--color-border);
+    border-radius:999px; padding:.35em .5em .35em 1em;
+    font-size:.88rem;
+  }
+  .chip button{
+    width:20px; height:20px; padding:0; border-radius:50%;
+    font-size:.85rem; line-height:1;
+  }
+  .recap-card{
+    display:flex; align-items:center; justify-content:space-between;
+    background:var(--color-surface); border:1px solid var(--color-border);
+    border-radius:10px; padding:.7rem 1rem;
+  }
+  .recap-card-total{ font-size:1.15rem; font-weight:700; color:var(--color-primary-dark); }
+
   input, select{
     font-family:inherit;
     font-size:.92rem;
@@ -368,6 +386,7 @@
       <button class="tab-btn admin-only" data-tab="interimaires" hidden>Intérimaires</button>
       <button class="tab-btn admin-only" data-tab="agences" hidden>Agences</button>
       <button class="tab-btn manager-only" data-tab="employes" hidden>Employés</button>
+      <button class="tab-btn manager-only" data-tab="recup" hidden>Suivi récup</button>
       <button class="tab-btn admin-only" data-tab="utilisateurs" hidden>Utilisateurs</button>
       <button class="tab-btn employe-only" data-tab="mon-espace" hidden>Mon espace</button>
     </nav>
@@ -479,6 +498,34 @@
       <table class="data-table">
         <thead><tr><th>E-mail</th><th>Statut</th><th>Rôle</th><th>Associé à</th><th></th></tr></thead>
         <tbody id="utilisateurs-body"></tbody>
+      </table>
+    </section>
+
+    <!-- Onglet Suivi récup (admin + responsable) -->
+    <section id="tab-recup" class="tab-content" hidden>
+      <h2>Personnes suivies</h2>
+      <form id="recup-personne-form" class="inline-form">
+        <input type="text" id="recup-personne-nom" placeholder="Nom prénom" required>
+        <button type="submit">Ajouter</button>
+      </form>
+      <div id="recup-personnes-chips" class="chips-list"></div>
+
+      <h2>Ajouter une heure de week-end</h2>
+      <form id="recup-entry-form" class="inline-form">
+        <select id="recup-entry-personne" required></select>
+        <input type="date" id="recup-entry-date" required>
+        <input type="number" id="recup-entry-heures" min="0" step="0.5" placeholder="Heures" required>
+        <button type="submit">Ajouter</button>
+      </form>
+      <p id="recup-entry-warning" class="message error" hidden>Cette date n'est ni un samedi ni un dimanche — l'entrée sera quand même ajoutée si tu confirmes.</p>
+
+      <h2>Solde de récup par personne</h2>
+      <div id="recup-recap-cards" class="cards-list"></div>
+
+      <h2>Historique</h2>
+      <table class="data-table">
+        <thead><tr><th>Date</th><th>Personne</th><th>Heures</th><th>Récupéré</th><th></th></tr></thead>
+        <tbody id="recup-entries-body"></tbody>
       </table>
     </section>
 
@@ -771,7 +818,7 @@
      ÉTAT GLOBAL
      ========================================================== */
   let currentUser = null; // {uid, email, role, linkedId}
-  const cache = { agences: new Map(), interimaires: new Map(), employes: new Map() };
+  const cache = { agences: new Map(), interimaires: new Map(), employes: new Map(), recupPersonnes: new Map() };
 
   async function refreshCaches(){
     const [agSnap, intSnap, empSnap] = await Promise.all([
@@ -782,6 +829,11 @@
     cache.agences.clear(); agSnap.forEach(d=> cache.agences.set(d.id, {id:d.id, ...d.data()}));
     cache.interimaires.clear(); intSnap.forEach(d=> cache.interimaires.set(d.id, {id:d.id, ...d.data()}));
     cache.employes.clear(); empSnap.forEach(d=> cache.employes.set(d.id, {id:d.id, ...d.data()}));
+
+    if(currentUser && (currentUser.role==='admin' || currentUser.role==='responsable')){
+      const recSnap = await db.collection('recup_personnes').orderBy('nom').get();
+      cache.recupPersonnes.clear(); recSnap.forEach(d=> cache.recupPersonnes.set(d.id, {id:d.id, ...d.data()}));
+    }
   }
 
   /* ==========================================================
@@ -828,6 +880,9 @@
           break;
         case 'utilisateurs':
           renderUtilisateursTab();
+          break;
+        case 'recup':
+          renderRecupTab();
           break;
         case 'mon-espace':
           renderMonEspace();
@@ -1101,6 +1156,153 @@
 
       tr.append(tdEmail, tdStatus, tdRole, tdAssoc, tdActions);
       body.appendChild(tr);
+    });
+  }
+
+  /* ==========================================================
+     ONGLET SUIVI RÉCUP (admin + responsable)
+     ========================================================== */
+  document.getElementById('recup-personne-form').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const nom = document.getElementById('recup-personne-nom').value.trim();
+    if(!nom) return;
+    try{
+      await db.collection('recup_personnes').add({ nom, createdAt: FieldValue.serverTimestamp() });
+      document.getElementById('recup-personne-form').reset();
+      await refreshCaches();
+      renderRecupTab();
+      toast('Personne ajoutée');
+    }catch(err){
+      console.error(err);
+      toast('Erreur : ' + err.message, true);
+    }
+  });
+
+  document.getElementById('recup-entry-date').addEventListener('change', function(){
+    if(!this.value){ document.getElementById('recup-entry-warning').hidden = true; return; }
+    const day = fromDateStr(this.value).getDay();
+    document.getElementById('recup-entry-warning').hidden = (day!==0 && day!==6);
+  });
+
+  document.getElementById('recup-entry-form').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const personneId = document.getElementById('recup-entry-personne').value;
+    const date = document.getElementById('recup-entry-date').value;
+    const heures = Number(document.getElementById('recup-entry-heures').value);
+    if(!personneId || !date || !heures) return;
+    try{
+      await db.collection('recup_entries').add({
+        personneId, date, heures, recupere:false, createdAt: FieldValue.serverTimestamp()
+      });
+      document.getElementById('recup-entry-form').reset();
+      document.getElementById('recup-entry-warning').hidden = true;
+      renderRecupTab();
+      toast('Entrée ajoutée');
+    }catch(err){
+      console.error(err);
+      toast('Erreur : ' + err.message, true);
+    }
+  });
+
+  function renderRecupPersonnesChips(){
+    const chipsEl = document.getElementById('recup-personnes-chips');
+    chipsEl.innerHTML = '';
+    [...cache.recupPersonnes.values()].forEach(p=>{
+      const chip = document.createElement('span'); chip.className='chip';
+      chip.append(document.createTextNode(p.nom));
+      const delBtn = document.createElement('button'); delBtn.className='icon-btn danger'; delBtn.textContent='×';
+      delBtn.title = 'Retirer cette personne du suivi';
+      delBtn.addEventListener('click', async ()=>{
+        if(!confirm(`Retirer ${p.nom} du suivi récup ?\n\nSon historique d'heures sera également supprimé.`)) return;
+        try{
+          const entriesSnap = await db.collection('recup_entries').where('personneId','==',p.id).get();
+          await Promise.all(entriesSnap.docs.map(d=> d.ref.delete()));
+          await db.collection('recup_personnes').doc(p.id).delete();
+          await refreshCaches();
+          renderRecupTab();
+          toast('Personne retirée');
+        }catch(err){
+          console.error(err);
+          toast('Erreur : ' + err.message, true);
+        }
+      });
+      chip.appendChild(delBtn);
+      chipsEl.appendChild(chip);
+    });
+  }
+
+  function populateRecupPersonneSelect(){
+    const sel = document.getElementById('recup-entry-personne');
+    const current = sel.value;
+    sel.innerHTML = [...cache.recupPersonnes.values()].map(p=>`<option value="${p.id}">${escapeHtml(p.nom)}</option>`).join('');
+    if([...sel.options].some(o=>o.value===current)) sel.value = current;
+  }
+
+  async function renderRecupTab(){
+    renderRecupPersonnesChips();
+    populateRecupPersonneSelect();
+
+    const recapEl = document.getElementById('recup-recap-cards');
+    const bodyEl = document.getElementById('recup-entries-body');
+    recapEl.innerHTML = ''; bodyEl.innerHTML = '';
+
+    if(cache.recupPersonnes.size===0){
+      recapEl.innerHTML = '<p class="muted">Ajoute une personne ci-dessus pour commencer.</p>';
+      return;
+    }
+
+    let snap;
+    try{
+      snap = await db.collection('recup_entries').get();
+    }catch(err){
+      console.error(err);
+      recapEl.innerHTML = `<p class="message error">Erreur : ${escapeHtml(err.message)}</p>`;
+      return;
+    }
+    const entries = []; snap.forEach(doc=> entries.push({id:doc.id, ...doc.data()}));
+
+    [...cache.recupPersonnes.values()].forEach(p=>{
+      const solde = entries.filter(e=> e.personneId===p.id && !e.recupere).reduce((s,e)=> s+(e.heures||0), 0);
+      const card = document.createElement('div'); card.className='recap-card';
+      card.innerHTML = `<span>${escapeHtml(p.nom)}</span><span class="recap-card-total">${solde} h</span>`;
+      recapEl.appendChild(card);
+    });
+
+    entries.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+    entries.forEach(e=>{
+      const personne = cache.recupPersonnes.get(e.personneId);
+      const tr = document.createElement('tr');
+      const tdDate = document.createElement('td'); tdDate.textContent = e.date ? humanDate(fromDateStr(e.date)) : '—';
+      const tdNom = document.createElement('td'); tdNom.textContent = personne ? personne.nom : '(supprimé)';
+      const tdHeures = document.createElement('td'); tdHeures.textContent = (e.heures||0) + ' h';
+      const tdRecup = document.createElement('td');
+      const cb = document.createElement('input'); cb.type='checkbox'; cb.checked = !!e.recupere;
+      cb.addEventListener('change', async ()=>{
+        try{
+          await db.collection('recup_entries').doc(e.id).update({ recupere: cb.checked });
+          renderRecupTab();
+        }catch(err){
+          console.error(err);
+          toast('Erreur : ' + err.message, true);
+          cb.checked = !cb.checked;
+        }
+      });
+      tdRecup.appendChild(cb);
+      const tdActions = document.createElement('td');
+      const delBtn = document.createElement('button'); delBtn.className='icon-btn danger'; delBtn.textContent='Suppr.';
+      delBtn.addEventListener('click', async ()=>{
+        if(!confirm('Supprimer cette entrée ?')) return;
+        try{
+          await db.collection('recup_entries').doc(e.id).delete();
+          renderRecupTab();
+        }catch(err){
+          console.error(err);
+          toast('Erreur : ' + err.message, true);
+        }
+      });
+      tdActions.appendChild(delBtn);
+      tr.append(tdDate, tdNom, tdHeures, tdRecup, tdActions);
+      bodyEl.appendChild(tr);
     });
   }
 
@@ -1786,6 +1988,7 @@
       calEmployes.goToday();
       renderSemaineEmployes();
       renderMoisEmployes();
+      renderRecupTab();
     }
     if(currentUser.role!=='employe'){
       calInterimaires.goToday();
