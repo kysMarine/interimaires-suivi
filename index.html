@@ -393,17 +393,32 @@
 
     <!-- Onglet Calendrier -->
     <section id="tab-calendrier" class="tab-content">
+      <h2>Production</h2>
       <div class="calendar-nav">
-        <button id="cal-prev" class="secondary">&larr;</button>
-        <h2 id="cal-month-label"></h2>
-        <button id="cal-next" class="secondary">&rarr;</button>
+        <button id="cal-prod-prev" class="secondary">&larr;</button>
+        <h2 id="cal-prod-month-label"></h2>
+        <button id="cal-prod-next" class="secondary">&rarr;</button>
       </div>
-      <div id="calendar-grid" class="calendar-grid"></div>
+      <div id="calendar-grid-prod" class="calendar-grid"></div>
 
-      <div id="day-panel" class="day-panel" hidden>
-        <h3 id="day-panel-title"></h3>
-        <div id="day-panel-body" class="cards-list"></div>
-        <button type="button" id="add-row-btn" class="secondary add-row-btn admin-only" hidden>+ Ajouter un intérimaire</button>
+      <div id="day-panel-prod" class="day-panel" hidden>
+        <h3 id="day-panel-prod-title"></h3>
+        <div id="day-panel-prod-body" class="cards-list"></div>
+        <button type="button" id="add-row-btn-prod" class="secondary add-row-btn manager-only" hidden>+ Ajouter un intérimaire</button>
+      </div>
+
+      <h2>Emballage</h2>
+      <div class="calendar-nav">
+        <button id="cal-emb-prev" class="secondary">&larr;</button>
+        <h2 id="cal-emb-month-label"></h2>
+        <button id="cal-emb-next" class="secondary">&rarr;</button>
+      </div>
+      <div id="calendar-grid-emb" class="calendar-grid"></div>
+
+      <div id="day-panel-emb" class="day-panel" hidden>
+        <h3 id="day-panel-emb-title"></h3>
+        <div id="day-panel-emb-body" class="cards-list"></div>
+        <button type="button" id="add-row-btn-emb" class="secondary add-row-btn manager-only" hidden>+ Ajouter un intérimaire</button>
       </div>
     </section>
 
@@ -467,6 +482,9 @@
         <input type="text" id="int-nom" placeholder="Nom" required>
         <input type="text" id="int-prenom" placeholder="Prénom" required>
         <select id="int-agence"></select>
+        <label style="display:flex; align-items:center; gap:.4rem; font-size:.9rem;">
+          <input type="checkbox" id="int-emballage"> Emballage
+        </label>
         <button type="submit">Ajouter</button>
       </form>
       <div class="inline-form">
@@ -479,7 +497,7 @@
       </div>
       <table class="data-table">
         <thead>
-          <tr><th>Nom</th><th>Prénom</th><th>Agence</th><th>Actif</th><th></th></tr>
+          <tr><th>Nom</th><th>Prénom</th><th>Agence</th><th>Catégorie</th><th>Actif</th><th></th></tr>
         </thead>
         <tbody id="interimaires-body"></tbody>
       </table>
@@ -873,7 +891,8 @@
       await refreshCaches();
       switch(tab){
         case 'calendrier':
-          calInterimaires.render();
+          calInterimairesProd.render();
+          calInterimairesEmb.render();
           break;
         case 'semaine':
           populateWeekAgenceFilter();
@@ -1330,8 +1349,9 @@
     const nom=document.getElementById('int-nom').value.trim();
     const prenom=document.getElementById('int-prenom').value.trim();
     const agenceId=document.getElementById('int-agence').value;
+    const emballage=document.getElementById('int-emballage').checked;
     if(!nom||!prenom) return;
-    await db.collection('interimaires').add({ nom, prenom, agenceId: agenceId||null, actif:true, createdAt: FieldValue.serverTimestamp() });
+    await db.collection('interimaires').add({ nom, prenom, agenceId: agenceId||null, emballage, actif:true, createdAt: FieldValue.serverTimestamp() });
     e.target.reset();
     await refreshCaches();
     renderInterimairesTab();
@@ -1362,6 +1382,7 @@
     const tdNom = document.createElement('td'); tdNom.textContent = p.nom;
     const tdPrenom = document.createElement('td'); tdPrenom.textContent = p.prenom;
     const tdAgence = document.createElement('td'); tdAgence.textContent = cache.agences.get(p.agenceId)?.nom || '—';
+    const tdCategorie = document.createElement('td'); tdCategorie.textContent = p.emballage ? 'Emballage' : 'Production';
     const tdActif = document.createElement('td');
     const tdActions = document.createElement('td');
 
@@ -1387,16 +1408,20 @@
     });
 
     tdActions.append(editBtn, delBtn);
-    tr.append(tdNom, tdPrenom, tdAgence, tdActif, tdActions);
+    tr.append(tdNom, tdPrenom, tdAgence, tdCategorie, tdActif, tdActions);
 
     function enterEditMode(){
-      tdNom.innerHTML=''; tdPrenom.innerHTML=''; tdAgence.innerHTML='';
+      tdNom.innerHTML=''; tdPrenom.innerHTML=''; tdAgence.innerHTML=''; tdCategorie.innerHTML='';
       const inNom = document.createElement('input'); inNom.type='text'; inNom.value=p.nom; tdNom.appendChild(inNom);
       const inPrenom = document.createElement('input'); inPrenom.type='text'; inPrenom.value=p.prenom; tdPrenom.appendChild(inPrenom);
       const selAgence = document.createElement('select');
       selAgence.innerHTML = [...cache.agences.values()].map(a=>`<option value="${a.id}">${escapeHtml(a.nom)}</option>`).join('');
       selAgence.value = p.agenceId || '';
       tdAgence.appendChild(selAgence);
+      const catLabel = document.createElement('label'); catLabel.style.cssText='display:flex; align-items:center; gap:.35rem; font-size:.85rem; white-space:nowrap;';
+      const inEmballage = document.createElement('input'); inEmballage.type='checkbox'; inEmballage.checked = !!p.emballage;
+      catLabel.append(inEmballage, document.createTextNode('Emballage'));
+      tdCategorie.appendChild(catLabel);
 
       tdActions.innerHTML='';
       const saveBtn = document.createElement('button'); saveBtn.className='secondary'; saveBtn.textContent='Enregistrer';
@@ -1404,7 +1429,7 @@
         const nom = inNom.value.trim(), prenom = inPrenom.value.trim();
         if(!nom || !prenom){ toast('Nom et prénom requis', true); return; }
         try{
-          await db.collection('interimaires').doc(p.id).update({ nom, prenom, agenceId: selAgence.value || null });
+          await db.collection('interimaires').doc(p.id).update({ nom, prenom, agenceId: selAgence.value || null, emballage: inEmballage.checked });
           toast('Fiche mise à jour — les heures déjà enregistrées ne sont pas modifiées');
           await refreshCaches();
           renderInterimairesTab();
@@ -1470,6 +1495,12 @@
     let current = new Date(); current.setDate(1); current.setHours(0,0,0,0);
     let selectedDate = null;
 
+    function personBelongs(personId){
+      if(!cfg.categoryFilter) return true;
+      const p = cache.interimaires.get(personId) || cache.employes.get(personId);
+      return p ? cfg.categoryFilter(p) : true;
+    }
+
     async function render(){
       cfg.monthLabelEl.textContent = monthLabel(current);
       const year=current.getFullYear(), month=current.getMonth();
@@ -1482,6 +1513,7 @@
           .where('date','>=',startStr).where('date','<=',endStr).get();
         snap.forEach(doc=>{
           const d = doc.data();
+          if(!personBelongs(d.personId)) return;
           entriesByDate.set(d.date, (entriesByDate.get(d.date)||0)+1);
         });
       }catch(err){ console.error(err); }
@@ -1515,7 +1547,7 @@
 
     async function renderDayPanel(ds){
       const snap = await db.collection(cfg.pointagesCollection).where('date','==',ds).get();
-      const entries = []; snap.forEach(doc=> entries.push({id:doc.id, ...doc.data()}));
+      const entries = []; snap.forEach(doc=>{ if(personBelongs(doc.data().personId)) entries.push({id:doc.id, ...doc.data()}); });
       cfg.dayPanelBodyEl.innerHTML='';
       entries.forEach(entry=> cfg.dayPanelBodyEl.appendChild(buildRow(ds, entry)));
 
@@ -1714,16 +1746,33 @@
     return { render, goToday: ()=>{ current=new Date(current.getFullYear(), current.getMonth(), 1); render(); } };
   }
 
-  const calInterimaires = createPersonCalendar({
-    gridEl: document.getElementById('calendar-grid'),
-    monthLabelEl: document.getElementById('cal-month-label'),
-    prevBtn: document.getElementById('cal-prev'),
-    nextBtn: document.getElementById('cal-next'),
-    dayPanelEl: document.getElementById('day-panel'),
-    dayPanelTitleEl: document.getElementById('day-panel-title'),
-    dayPanelBodyEl: document.getElementById('day-panel-body'),
-    addRowBtn: document.getElementById('add-row-btn'),
-    personsSource: ()=> [...cache.interimaires.values()].filter(p=> p.actif && (currentUser.role!=='agence' || p.agenceId===currentUser.linkedId)),
+  const calInterimairesProd = createPersonCalendar({
+    gridEl: document.getElementById('calendar-grid-prod'),
+    monthLabelEl: document.getElementById('cal-prod-month-label'),
+    prevBtn: document.getElementById('cal-prod-prev'),
+    nextBtn: document.getElementById('cal-prod-next'),
+    dayPanelEl: document.getElementById('day-panel-prod'),
+    dayPanelTitleEl: document.getElementById('day-panel-prod-title'),
+    dayPanelBodyEl: document.getElementById('day-panel-prod-body'),
+    addRowBtn: document.getElementById('add-row-btn-prod'),
+    personsSource: ()=> [...cache.interimaires.values()].filter(p=> p.actif && !p.emballage && (currentUser.role!=='agence' || p.agenceId===currentUser.linkedId)),
+    categoryFilter: p=> !p.emballage,
+    pointagesCollection: 'pointages_interimaires',
+    canEdit: ()=> currentUser.role==='admin' || currentUser.role==='responsable',
+    canAddRemove: ()=> currentUser.role==='admin' || currentUser.role==='responsable'
+  });
+
+  const calInterimairesEmb = createPersonCalendar({
+    gridEl: document.getElementById('calendar-grid-emb'),
+    monthLabelEl: document.getElementById('cal-emb-month-label'),
+    prevBtn: document.getElementById('cal-emb-prev'),
+    nextBtn: document.getElementById('cal-emb-next'),
+    dayPanelEl: document.getElementById('day-panel-emb'),
+    dayPanelTitleEl: document.getElementById('day-panel-emb-title'),
+    dayPanelBodyEl: document.getElementById('day-panel-emb-body'),
+    addRowBtn: document.getElementById('add-row-btn-emb'),
+    personsSource: ()=> [...cache.interimaires.values()].filter(p=> p.actif && p.emballage && (currentUser.role!=='agence' || p.agenceId===currentUser.linkedId)),
+    categoryFilter: p=> !!p.emballage,
     pointagesCollection: 'pointages_interimaires',
     canEdit: ()=> currentUser.role==='admin' || currentUser.role==='responsable',
     canAddRemove: ()=> currentUser.role==='admin' || currentUser.role==='responsable'
@@ -2018,7 +2067,8 @@
       renderRecupTab();
     }
     if(currentUser.role!=='employe'){
-      calInterimaires.goToday();
+      calInterimairesProd.goToday();
+      calInterimairesEmb.goToday();
       populateWeekAgenceFilter();
       renderSemaineInterimaires();
       renderMoisInterimaires();
