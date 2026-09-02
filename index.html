@@ -195,6 +195,20 @@
 
   .tab-content{padding:1.4rem; max-width:1080px; margin:0 auto;}
 
+  .sub-tabs{
+    padding:0; margin-bottom:1.2rem;
+    border-bottom:1px solid var(--color-border);
+    background:transparent; display:flex; gap:.3rem;
+  }
+  .sub-tab-btn{
+    background:transparent; color:var(--color-muted);
+    border-radius:8px 8px 0 0;
+    padding:.5em .9em; font-size:.92rem; font-weight:600;
+    border-bottom:2px solid transparent;
+  }
+  .sub-tab-btn:hover{ color:var(--color-ink); background:#F0F2F1; }
+  .sub-tab-btn.active{ color:var(--color-primary); border-bottom-color:var(--color-accent); background:transparent; }
+
   /* ---------- Calendar ---------- */
   .calendar-nav{
     display:flex; align-items:center; justify-content:center; gap:1.2rem;
@@ -381,10 +395,10 @@
     </header>
 
     <nav class="tabs">
-      <button class="tab-btn active not-employe" data-tab="calendrier">Calendrier Intérim</button>
+      <button class="tab-btn active not-employe" data-tab="calendrier-prod">Calendrier Intérim Prod</button>
+      <button class="tab-btn not-employe" data-tab="calendrier-emb">Calendrier Intérim Emballage</button>
       <button class="tab-btn not-employe" data-tab="semaine">Récap semaine Intérim</button>
-      <button class="tab-btn admin-only" data-tab="interimaires" hidden>Intérimaires</button>
-      <button class="tab-btn admin-only" data-tab="agences" hidden>Agences</button>
+      <button class="tab-btn admin-only" data-tab="enregistrement" hidden>Enregistrement</button>
       <button class="tab-btn manager-only" data-tab="employes" hidden>Employés</button>
       <button class="tab-btn manager-only" data-tab="recup" hidden>Suivi récup</button>
       <button class="tab-btn admin-only" data-tab="utilisateurs" hidden>Utilisateurs</button>
@@ -392,8 +406,7 @@
     </nav>
 
     <!-- Onglet Calendrier -->
-    <section id="tab-calendrier" class="tab-content">
-      <h2>Production</h2>
+    <section id="tab-calendrier-prod" class="tab-content">
       <div class="calendar-nav">
         <button id="cal-prod-prev" class="secondary">&larr;</button>
         <h2 id="cal-prod-month-label"></h2>
@@ -406,8 +419,9 @@
         <div id="day-panel-prod-body" class="cards-list"></div>
         <button type="button" id="add-row-btn-prod" class="secondary add-row-btn manager-only" hidden>+ Ajouter un intérimaire</button>
       </div>
+    </section>
 
-      <h2>Emballage</h2>
+    <section id="tab-calendrier-emb" class="tab-content" hidden>
       <div class="calendar-nav">
         <button id="cal-emb-prev" class="secondary">&larr;</button>
         <h2 id="cal-emb-month-label"></h2>
@@ -476,45 +490,52 @@
     </section>
 
     <!-- Onglet Intérimaires (admin) -->
-    <section id="tab-interimaires" class="tab-content" hidden>
-      <h2>Intérimaires</h2>
-      <form id="interimaire-form" class="inline-form">
-        <input type="text" id="int-nom" placeholder="Nom" required>
-        <input type="text" id="int-prenom" placeholder="Prénom" required>
-        <select id="int-agence"></select>
-        <label style="display:flex; align-items:center; gap:.4rem; font-size:.9rem;">
-          <input type="checkbox" id="int-emballage"> Emballage
-        </label>
-        <button type="submit">Ajouter</button>
-      </form>
-      <div class="inline-form">
-        <label for="int-sort" class="muted">Trier par :</label>
-        <select id="int-sort">
-          <option value="nom">Nom (A→Z)</option>
-          <option value="prenom">Prénom (A→Z)</option>
-          <option value="agence">Agence (A→Z)</option>
-        </select>
-      </div>
-      <table class="data-table">
-        <thead>
-          <tr><th>Nom</th><th>Prénom</th><th>Agence</th><th>Catégorie</th><th>Actif</th><th></th></tr>
-        </thead>
-        <tbody id="interimaires-body"></tbody>
-      </table>
-    </section>
+    <!-- Onglet Enregistrement (admin) — regroupe Intérimaires et Agences -->
+    <section id="tab-enregistrement" class="tab-content" hidden>
+      <nav class="tabs sub-tabs">
+        <button class="sub-tab-btn active" data-subtab="interimaires">Intérimaires</button>
+        <button class="sub-tab-btn" data-subtab="agences">Agences</button>
+      </nav>
 
-    <!-- Onglet Agences (admin) -->
-    <section id="tab-agences" class="tab-content" hidden>
-      <h2>Agences d'intérim</h2>
-      <form id="agence-form" class="inline-form">
-        <input type="text" id="agence-nom" placeholder="Nom de l'agence" required>
-        <input type="email" id="agence-email" placeholder="E-mail de contact">
-        <button type="submit">Ajouter</button>
-      </form>
-      <table class="data-table">
-        <thead><tr><th>Nom</th><th>E-mail</th><th></th></tr></thead>
-        <tbody id="agences-body"></tbody>
-      </table>
+      <div id="subtab-interimaires" class="sub-tab-content">
+        <h2>Intérimaires</h2>
+        <form id="interimaire-form" class="inline-form">
+          <input type="text" id="int-nom" placeholder="Nom" required>
+          <input type="text" id="int-prenom" placeholder="Prénom" required>
+          <select id="int-agence"></select>
+          <label style="display:flex; align-items:center; gap:.4rem; font-size:.9rem;">
+            <input type="checkbox" id="int-emballage"> Emballage
+          </label>
+          <button type="submit">Ajouter</button>
+        </form>
+        <div class="inline-form">
+          <label for="int-sort" class="muted">Trier par :</label>
+          <select id="int-sort">
+            <option value="nom">Nom (A→Z)</option>
+            <option value="prenom">Prénom (A→Z)</option>
+            <option value="agence">Agence (A→Z)</option>
+          </select>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr><th>Nom</th><th>Prénom</th><th>Agence</th><th>Catégorie</th><th>Actif</th><th></th></tr>
+          </thead>
+          <tbody id="interimaires-body"></tbody>
+        </table>
+      </div>
+
+      <div id="subtab-agences" class="sub-tab-content" hidden>
+        <h2>Agences d'intérim</h2>
+        <form id="agence-form" class="inline-form">
+          <input type="text" id="agence-nom" placeholder="Nom de l'agence" required>
+          <input type="email" id="agence-email" placeholder="E-mail de contact">
+          <button type="submit">Ajouter</button>
+        </form>
+        <table class="data-table">
+          <thead><tr><th>Nom</th><th>E-mail</th><th></th></tr></thead>
+          <tbody id="agences-body"></tbody>
+        </table>
+      </div>
     </section>
 
     <!-- Onglet Utilisateurs (admin) -->
@@ -879,6 +900,17 @@
     document.querySelectorAll('.tab-btn').forEach(btn=>{
       btn.addEventListener('click', ()=> switchTab(btn.dataset.tab));
     });
+    document.querySelectorAll('.sub-tab-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=> switchSubTab(btn.dataset.subtab));
+    });
+  }
+  function switchSubTab(subtab){
+    document.querySelectorAll('.sub-tab-btn').forEach(b=> b.classList.toggle('active', b.dataset.subtab===subtab));
+    document.querySelectorAll('.sub-tab-content').forEach(s=> s.hidden = (s.id !== 'subtab-'+subtab));
+    if(appReady){
+      if(subtab==='interimaires') renderInterimairesTab();
+      if(subtab==='agences') renderAgencesTab();
+    }
   }
   let appReady = false;
   function switchTab(tab){
@@ -890,8 +922,10 @@
     try{
       await refreshCaches();
       switch(tab){
-        case 'calendrier':
+        case 'calendrier-prod':
           calInterimairesProd.render();
+          break;
+        case 'calendrier-emb':
           calInterimairesEmb.render();
           break;
         case 'semaine':
@@ -899,12 +933,11 @@
           renderSemaineInterimaires();
           renderMoisInterimaires();
           break;
-        case 'interimaires':
-          renderInterimairesTab();
+        case 'enregistrement':{
+          const activeSub = document.querySelector('.sub-tab-btn.active')?.dataset.subtab || 'interimaires';
+          if(activeSub==='agences') renderAgencesTab(); else renderInterimairesTab();
           break;
-        case 'agences':
-          renderAgencesTab();
-          break;
+        }
         case 'employes':
           calEmployes.render();
           renderSemaineEmployes();
@@ -930,7 +963,7 @@
     document.querySelectorAll('.manager-only').forEach(el=> el.hidden = !(role==='admin' || role==='responsable'));
     document.querySelectorAll('.employe-only').forEach(el=> el.hidden = role!=='employe');
     document.querySelectorAll('.not-employe').forEach(el=> el.hidden = role==='employe');
-    switchTab(role==='employe' ? 'mon-espace' : 'calendrier');
+    switchTab(role==='employe' ? 'mon-espace' : 'calendrier-prod');
   }
 
   /* ==========================================================
