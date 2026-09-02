@@ -469,6 +469,14 @@
         <select id="int-agence"></select>
         <button type="submit">Ajouter</button>
       </form>
+      <div class="inline-form">
+        <label for="int-sort" class="muted">Trier par :</label>
+        <select id="int-sort">
+          <option value="nom">Nom (A→Z)</option>
+          <option value="prenom">Prénom (A→Z)</option>
+          <option value="agence">Agence (A→Z)</option>
+        </select>
+      </div>
       <table class="data-table">
         <thead>
           <tr><th>Nom</th><th>Prénom</th><th>Agence</th><th>Actif</th><th></th></tr>
@@ -514,7 +522,13 @@
       <form id="recup-entry-form" class="inline-form">
         <select id="recup-entry-personne" required></select>
         <input type="date" id="recup-entry-date" required>
-        <input type="number" id="recup-entry-heures" min="0" step="0.5" placeholder="Heures" required>
+        <input type="number" id="recup-entry-heures-h" min="0" step="1" placeholder="Heures" style="max-width:90px;" required>
+        <select id="recup-entry-heures-m" style="max-width:90px;">
+          <option value="0">00 min</option>
+          <option value="15">15 min</option>
+          <option value="30">30 min</option>
+          <option value="45">45 min</option>
+        </select>
         <button type="submit">Ajouter</button>
       </form>
       <p id="recup-entry-warning" class="message error" hidden>Cette date n'est ni un samedi ni un dimanche — l'entrée sera quand même ajoutée si tu confirmes.</p>
@@ -1188,7 +1202,9 @@
     e.preventDefault();
     const personneId = document.getElementById('recup-entry-personne').value;
     const date = document.getElementById('recup-entry-date').value;
-    const heures = Number(document.getElementById('recup-entry-heures').value);
+    const h = Number(document.getElementById('recup-entry-heures-h').value) || 0;
+    const m = Number(document.getElementById('recup-entry-heures-m').value) || 0;
+    const heures = h + m/60;
     if(!personneId || !date || !heures) return;
     try{
       await db.collection('recup_entries').add({
@@ -1327,8 +1343,19 @@
     agenceSelect.innerHTML = [...cache.agences.values()].map(a=>`<option value="${a.id}">${escapeHtml(a.nom)}</option>`).join('');
     const body = document.getElementById('interimaires-body');
     body.innerHTML='';
-    [...cache.interimaires.values()].forEach(p=> body.appendChild(buildInterimaireRow(p)));
+    const sortBy = document.getElementById('int-sort').value;
+    const list = [...cache.interimaires.values()].sort((a,b)=>{
+      if(sortBy==='prenom') return (a.prenom||'').localeCompare(b.prenom||'');
+      if(sortBy==='agence'){
+        const an = cache.agences.get(a.agenceId)?.nom || '';
+        const bn = cache.agences.get(b.agenceId)?.nom || '';
+        return an.localeCompare(bn) || (a.nom||'').localeCompare(b.nom||'');
+      }
+      return (a.nom||'').localeCompare(b.nom||'');
+    });
+    list.forEach(p=> body.appendChild(buildInterimaireRow(p)));
   }
+  document.getElementById('int-sort').addEventListener('change', renderInterimairesTab);
 
   function buildInterimaireRow(p){
     const tr = document.createElement('tr');
