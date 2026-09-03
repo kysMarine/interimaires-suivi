@@ -441,6 +441,12 @@
       <div class="inline-form manager-only" id="week-agence-filter-wrap" hidden>
         <label for="week-agence-filter" class="muted">Filtrer par agence :</label>
         <select id="week-agence-filter"><option value="">Toutes les agences</option></select>
+        <label for="week-categorie-filter" class="muted">Filtrer par catégorie :</label>
+        <select id="week-categorie-filter">
+          <option value="">Toutes les catégories</option>
+          <option value="production">Production</option>
+          <option value="emballage">Emballage</option>
+        </select>
       </div>
       <div class="calendar-nav">
         <button id="week-prev" class="secondary">&larr;</button>
@@ -1842,6 +1848,7 @@
     if([...sel.options].some(o=>o.value===current)) sel.value = current;
   }
   document.getElementById('week-agence-filter').addEventListener('change', ()=>{ renderSemaineInterimaires(); renderMoisInterimaires(); });
+  document.getElementById('week-categorie-filter').addEventListener('change', ()=>{ renderSemaineInterimaires(); renderMoisInterimaires(); });
 
   let semaineRef = new Date();
   async function renderSemaineInterimaires(){
@@ -1851,11 +1858,14 @@
     const totals = new Map();
     snap.forEach(doc=>{ const d=doc.data(); totals.set(d.personId, (totals.get(d.personId)||0) + (d.heuresCalculees||0)); });
     const filterAgenceId = document.getElementById('week-agence-filter').value;
+    const filterCategorie = document.getElementById('week-categorie-filter').value;
     const persons = [...cache.interimaires.values()].filter(p=>{
       if(!totals.has(p.id)) return false;
       if(!p.actif) return false;
-      if(currentUser.role==='agence') return p.agenceId===currentUser.linkedId;
-      if(filterAgenceId) return p.agenceId===filterAgenceId;
+      if(currentUser.role==='agence' && p.agenceId!==currentUser.linkedId) return false;
+      if(filterAgenceId && p.agenceId!==filterAgenceId) return false;
+      if(filterCategorie==='emballage' && !p.emballage) return false;
+      if(filterCategorie==='production' && p.emballage) return false;
       return true;
     });
     const body=document.getElementById('week-body'); body.innerHTML='';
@@ -1881,6 +1891,7 @@
     const totals = new Map();
     snap.forEach(doc=>{ const d=doc.data(); totals.set(d.personId, (totals.get(d.personId)||0) + (d.heuresCalculees||0)); });
     const filterAgenceId = document.getElementById('week-agence-filter').value;
+    const filterCategorie = document.getElementById('week-categorie-filter').value;
     const body = document.getElementById('mois-interim-body'); body.innerHTML='';
     let grandTotal=0;
     [...totals.entries()]
@@ -1888,7 +1899,9 @@
       .filter(({person})=>{
         if(!person) return true;
         if(currentUser.role==='agence') return person.agenceId===currentUser.linkedId;
-        if(filterAgenceId) return person.agenceId===filterAgenceId;
+        if(filterAgenceId && person.agenceId!==filterAgenceId) return false;
+        if(filterCategorie==='emballage' && !person.emballage) return false;
+        if(filterCategorie==='production' && person.emballage) return false;
         return true;
       })
       .sort((a,b)=> (a.person?.nom||'').localeCompare(b.person?.nom||''))
