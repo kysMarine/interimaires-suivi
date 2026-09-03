@@ -398,7 +398,7 @@
       <button class="tab-btn active not-employe" data-tab="calendrier-prod">Calendrier Intérim Prod</button>
       <button class="tab-btn not-employe" data-tab="calendrier-emb">Calendrier Intérim Emballage</button>
       <button class="tab-btn not-employe" data-tab="semaine">Récap semaine Intérim</button>
-      <button class="tab-btn admin-only" data-tab="enregistrement" hidden>Enregistrement</button>
+      <button class="tab-btn manager-only" data-tab="enregistrement" hidden>Enregistrement</button>
       <button class="tab-btn manager-only" data-tab="employes" hidden>Employés</button>
       <button class="tab-btn manager-only" data-tab="recup" hidden>Suivi récup</button>
       <button class="tab-btn admin-only" data-tab="utilisateurs" hidden>Utilisateurs</button>
@@ -2088,12 +2088,12 @@
     appReady = false;
     await refreshCaches();
     if(currentUser.role==='admin'){
-      renderAgencesTab();
       renderUtilisateursTab();
-      renderInterimairesTab();
       renderEmployesListTable();
     }
     if(currentUser.role==='admin' || currentUser.role==='responsable'){
+      renderAgencesTab();
+      renderInterimairesTab();
       calEmployes.goToday();
       renderSemaineEmployes();
       renderMoisEmployes();
