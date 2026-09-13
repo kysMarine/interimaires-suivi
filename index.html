@@ -581,11 +581,24 @@
       <h2>Solde de récup par personne</h2>
       <div id="recup-recap-cards" class="cards-list"></div>
 
-      <h2>Historique</h2>
+      <h2>Historique des heures travaillées</h2>
       <table class="data-table">
-        <thead><tr><th>Date</th><th>Personne</th><th>Heures</th><th>Récupéré</th><th></th></tr></thead>
+        <thead><tr><th>Date</th><th>Personne</th><th>Heures</th><th></th></tr></thead>
         <tbody id="recup-entries-body"></tbody>
       </table>
+
+      <h2>Calendrier des récup prises</h2>
+      <p class="muted">Clique sur une date pour noter que quelqu'un a pris ses heures de récup ce jour-là.</p>
+      <div class="calendar-nav">
+        <button id="recup-cal-prev" class="secondary">&larr;</button>
+        <h2 id="recup-cal-month-label"></h2>
+        <button id="recup-cal-next" class="secondary">&rarr;</button>
+      </div>
+      <div id="recup-calendar-grid" class="calendar-grid"></div>
+      <div id="recup-cal-day-panel" class="day-panel" hidden>
+        <h3 id="recup-cal-day-title"></h3>
+        <div id="recup-cal-day-body"></div>
+      </div>
     </section>
 
     <!-- Onglet Employés (admin) -->
@@ -1266,7 +1279,7 @@
     if(!personneId || !date || !heures) return;
     try{
       await db.collection('recup_entries').add({
-        personneId, date, heures, recupere:false, createdAt: FieldValue.serverTimestamp()
+        personneId, date, heures, createdAt: FieldValue.serverTimestamp()
       });
       document.getElementById('recup-entry-form').reset();
       document.getElementById('recup-entry-warning').hidden = true;
@@ -1289,8 +1302,14 @@
       delBtn.addEventListener('click', async ()=>{
         if(!confirm(`Retirer ${p.nom} du suivi récup ?\n\nSon historique d'heures sera également supprimé.`)) return;
         try{
-          const entriesSnap = await db.collection('recup_entries').where('personneId','==',p.id).get();
-          await Promise.all(entriesSnap.docs.map(d=> d.ref.delete()));
+          const [entriesSnap, recoveriesSnap] = await Promise.all([
+            db.collection('recup_entries').where('personneId','==',p.id).get(),
+            db.collection('recup_recoveries').where('personneId','==',p.id).get()
+          ]);
+          await Promise.all([
+            ...entriesSnap.docs.map(d=> d.ref.delete()),
+            ...recoveriesSnap.docs.map(d=> d.ref.delete())
+          ]);
           await db.collection('recup_personnes').doc(p.id).delete();
           await refreshCaches();
           renderRecupTab();
@@ -1312,9 +1331,23 @@
     if([...sel.options].some(o=>o.value===current)) sel.value = current;
   }
 
+  async function fetchRecupBalances(){
+    const [entriesSnap, recoveriesSnap] = await Promise.all([
+      db.collection('recup_entries').get(),
+      db.collection('recup_recoveries').get()
+    ]);
+    const entries = []; entriesSnap.forEach(doc=> entries.push({id:doc.id, ...doc.data()}));
+    const recoveries = []; recoveriesSnap.forEach(doc=> recoveries.push({id:doc.id, ...doc.data()}));
+    const soldes = new Map();
+    entries.forEach(e=> soldes.set(e.personneId, (soldes.get(e.personneId)||0) + (e.heures||0)));
+    recoveries.forEach(r=> soldes.set(r.personneId, (soldes.get(r.personneId)||0) - (r.heures||0)));
+    return { entries, recoveries, soldes };
+  }
+
   async function renderRecupTab(){
     renderRecupPersonnesChips();
     populateRecupPersonneSelect();
+    renderRecupCalendar();
 
     const recapEl = document.getElementById('recup-recap-cards');
     const bodyEl = document.getElementById('recup-entries-body');
@@ -1325,43 +1358,29 @@
       return;
     }
 
-    let snap;
+    let data;
     try{
-      snap = await db.collection('recup_entries').get();
+      data = await fetchRecupBalances();
     }catch(err){
       console.error(err);
       recapEl.innerHTML = `<p class="message error">Erreur : ${escapeHtml(err.message)}</p>`;
       return;
     }
-    const entries = []; snap.forEach(doc=> entries.push({id:doc.id, ...doc.data()}));
 
     [...cache.recupPersonnes.values()].forEach(p=>{
-      const solde = entries.filter(e=> e.personneId===p.id && !e.recupere).reduce((s,e)=> s+(e.heures||0), 0);
+      const solde = data.soldes.get(p.id) || 0;
       const card = document.createElement('div'); card.className='recap-card';
       card.innerHTML = `<span>${escapeHtml(p.nom)}</span><span class="recap-card-total">${solde} h</span>`;
       recapEl.appendChild(card);
     });
 
-    entries.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+    const entries = data.entries.slice().sort((a,b)=> (b.date||'').localeCompare(a.date||''));
     entries.forEach(e=>{
       const personne = cache.recupPersonnes.get(e.personneId);
       const tr = document.createElement('tr');
       const tdDate = document.createElement('td'); tdDate.textContent = e.date ? humanDate(fromDateStr(e.date)) : '—';
       const tdNom = document.createElement('td'); tdNom.textContent = personne ? personne.nom : '(supprimé)';
       const tdHeures = document.createElement('td'); tdHeures.textContent = (e.heures||0) + ' h';
-      const tdRecup = document.createElement('td');
-      const cb = document.createElement('input'); cb.type='checkbox'; cb.checked = !!e.recupere;
-      cb.addEventListener('change', async ()=>{
-        try{
-          await db.collection('recup_entries').doc(e.id).update({ recupere: cb.checked });
-          renderRecupTab();
-        }catch(err){
-          console.error(err);
-          toast('Erreur : ' + err.message, true);
-          cb.checked = !cb.checked;
-        }
-      });
-      tdRecup.appendChild(cb);
       const tdActions = document.createElement('td');
       const delBtn = document.createElement('button'); delBtn.className='icon-btn danger'; delBtn.textContent='Suppr.';
       delBtn.addEventListener('click', async ()=>{
@@ -1375,10 +1394,144 @@
         }
       });
       tdActions.appendChild(delBtn);
-      tr.append(tdDate, tdNom, tdHeures, tdRecup, tdActions);
+      tr.append(tdDate, tdNom, tdHeures, tdActions);
       bodyEl.appendChild(tr);
     });
   }
+
+  let recupCalCurrent = new Date(); recupCalCurrent.setDate(1);
+  let recupCalSelectedDate = null;
+
+  async function renderRecupCalendar(){
+    document.getElementById('recup-cal-month-label').textContent = monthLabel(recupCalCurrent);
+    const year=recupCalCurrent.getFullYear(), month=recupCalCurrent.getMonth();
+    const first=new Date(year,month,1), last=new Date(year,month+1,0);
+    const grid = document.getElementById('recup-calendar-grid');
+    let recoveries = [];
+    try{
+      const snap = await db.collection('recup_recoveries').get();
+      snap.forEach(doc=> recoveries.push({id:doc.id, ...doc.data()}));
+    }catch(err){
+      console.error(err);
+      grid.innerHTML = `<p class="message error" style="grid-column:1/-1">Erreur : ${escapeHtml(err.message)}</p>`;
+      return;
+    }
+    const byDate = new Map();
+    recoveries.forEach(r=>{
+      if(!byDate.has(r.date)) byDate.set(r.date, []);
+      byDate.get(r.date).push(r);
+    });
+
+    grid.innerHTML='';
+    ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'].forEach(w=>{ const el=document.createElement('div'); el.className='cal-weekday'; el.textContent=w; grid.appendChild(el); });
+    const leading=(first.getDay()+6)%7;
+    for(let i=0;i<leading;i++){ const el=document.createElement('div'); el.className='cal-cell empty'; grid.appendChild(el); }
+    const todayStr=toDateStr(new Date());
+    for(let day=1; day<=last.getDate(); day++){
+      const ds = toDateStr(new Date(year,month,day));
+      const el=document.createElement('div');
+      el.className='cal-cell'+(ds===todayStr?' today':'')+(ds===recupCalSelectedDate?' selected':'');
+      const list = byDate.get(ds);
+      el.innerHTML = `<span class="cal-day-num">${day}</span>` + (list ? `<span class="cal-badge">${list.length}</span>` : '');
+      el.addEventListener('click', ()=> openRecupCalDay(ds));
+      grid.appendChild(el);
+    }
+  }
+
+  async function openRecupCalDay(ds){
+    recupCalSelectedDate = ds;
+    renderRecupCalendar();
+    document.getElementById('recup-cal-day-panel').hidden = false;
+    document.getElementById('recup-cal-day-title').textContent = humanDate(fromDateStr(ds));
+    const body = document.getElementById('recup-cal-day-body');
+    body.innerHTML = '<p class="muted">Chargement…</p>';
+
+    let data, dayRecoveries;
+    try{
+      data = await fetchRecupBalances();
+      const snap = await db.collection('recup_recoveries').where('date','==',ds).get();
+      dayRecoveries = []; snap.forEach(doc=> dayRecoveries.push({id:doc.id, ...doc.data()}));
+    }catch(err){
+      console.error(err);
+      body.innerHTML = `<p class="message error">Erreur : ${escapeHtml(err.message)}</p>`;
+      return;
+    }
+
+    body.innerHTML = '';
+
+    if(dayRecoveries.length){
+      const list = document.createElement('div'); list.style.marginBottom = '1rem';
+      dayRecoveries.forEach(r=>{
+        const personne = cache.recupPersonnes.get(r.personneId);
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:.4rem 0; border-bottom:1px solid var(--color-border);';
+        const label = document.createElement('span'); label.textContent = `${personne ? personne.nom : '(supprimé)'} — ${r.heures} h`;
+        const delBtn = document.createElement('button'); delBtn.className='icon-btn danger'; delBtn.textContent='Suppr.';
+        delBtn.addEventListener('click', async ()=>{
+          if(!confirm('Annuler cette récup prise ?')) return;
+          try{
+            await db.collection('recup_recoveries').doc(r.id).delete();
+            openRecupCalDay(ds);
+            renderRecupTab();
+          }catch(err){
+            console.error(err);
+            toast('Erreur : ' + err.message, true);
+          }
+        });
+        row.append(label, delBtn);
+        list.appendChild(row);
+      });
+      body.appendChild(list);
+    }
+
+    const available = [...cache.recupPersonnes.values()]
+      .map(p=> ({ p, solde: data.soldes.get(p.id) || 0 }))
+      .filter(x=> x.solde > 0);
+
+    if(available.length===0){
+      const msg = document.createElement('p'); msg.className='muted';
+      msg.textContent = "Personne n'a d'heures à récupérer actuellement.";
+      body.appendChild(msg);
+      return;
+    }
+
+    const form = document.createElement('div'); form.className='inline-form';
+    const sel = document.createElement('select');
+    sel.innerHTML = available.map(x=> `<option value="${x.p.id}">${escapeHtml(x.p.nom)} — ${x.solde} h disponibles</option>`).join('');
+    const heuresInput = document.createElement('input'); heuresInput.type='number'; heuresInput.min='0'; heuresInput.step='0.5'; heuresInput.placeholder='Heures'; heuresInput.style.maxWidth='90px';
+    const addBtn = document.createElement('button'); addBtn.textContent='Ajouter';
+    addBtn.addEventListener('click', async ()=>{
+      const personneId = sel.value;
+      const heures = Number(heuresInput.value);
+      if(!personneId || !heures){ toast('Renseigne les heures', true); return; }
+      const soldeDispo = data.soldes.get(personneId) || 0;
+      if(heures > soldeDispo){
+        if(!confirm(`Cette personne n'a que ${soldeDispo} h disponibles. Continuer quand même ?`)) return;
+      }
+      try{
+        await db.collection('recup_recoveries').add({ personneId, date: ds, heures, createdAt: FieldValue.serverTimestamp() });
+        toast('Récup enregistrée');
+        openRecupCalDay(ds);
+        renderRecupTab();
+      }catch(err){
+        console.error(err);
+        toast('Erreur : ' + err.message, true);
+      }
+    });
+    form.append(sel, heuresInput, addBtn);
+    body.appendChild(form);
+  }
+
+  document.getElementById('recup-cal-prev').addEventListener('click', ()=>{
+    recupCalCurrent = new Date(recupCalCurrent.getFullYear(), recupCalCurrent.getMonth()-1, 1);
+    document.getElementById('recup-cal-day-panel').hidden = true; recupCalSelectedDate = null;
+    renderRecupCalendar();
+  });
+  document.getElementById('recup-cal-next').addEventListener('click', ()=>{
+    recupCalCurrent = new Date(recupCalCurrent.getFullYear(), recupCalCurrent.getMonth()+1, 1);
+    document.getElementById('recup-cal-day-panel').hidden = true; recupCalSelectedDate = null;
+    renderRecupCalendar();
+  });
 
   /* ==========================================================
      ONGLET INTÉRIMAIRES (admin)
