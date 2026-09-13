@@ -581,8 +581,11 @@
       <h2>Solde de récup par personne</h2>
       <div id="recup-recap-cards" class="cards-list"></div>
 
-      <h2>Historique des heures travaillées</h2>
-      <table class="data-table">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+        <h2 style="margin:0;">Historique des heures travaillées</h2>
+        <button type="button" id="recup-history-toggle" class="icon-btn">Masquer</button>
+      </div>
+      <table class="data-table" id="recup-history-table">
         <thead><tr><th>Date</th><th>Personne</th><th>Heures</th><th></th></tr></thead>
         <tbody id="recup-entries-body"></tbody>
       </table>
@@ -1247,6 +1250,13 @@
   /* ==========================================================
      ONGLET SUIVI RÉCUP (admin + responsable)
      ========================================================== */
+  document.getElementById('recup-history-toggle').addEventListener('click', ()=>{
+    const table = document.getElementById('recup-history-table');
+    const btn = document.getElementById('recup-history-toggle');
+    table.hidden = !table.hidden;
+    btn.textContent = table.hidden ? 'Afficher' : 'Masquer';
+  });
+
   document.getElementById('recup-personne-form').addEventListener('submit', async e=>{
     e.preventDefault();
     const nom = document.getElementById('recup-personne-nom').value.trim();
