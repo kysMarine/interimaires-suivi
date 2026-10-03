@@ -2182,16 +2182,6 @@
   document.getElementById('emp-week-prev').addEventListener('click', ()=>{empSemaineRef=addDays(empSemaineRef,-7); renderSemaineEmployes();});
   document.getElementById('emp-week-next').addEventListener('click', ()=>{empSemaineRef=addDays(empSemaineRef,7); renderSemaineEmployes();});
 
-  function countJoursOuvresDansMois(year, month){
-    const nbJours = new Date(year, month+1, 0).getDate();
-    let n=0;
-    for(let day=1; day<=nbJours; day++){
-      const dow = new Date(year, month, day).getDay(); // 0=dimanche, 6=samedi
-      if(dow!==0 && dow!==6) n++;
-    }
-    return n;
-  }
-
   let empMoisRef = new Date();
   async function renderMoisEmployes(){
     const year=empMoisRef.getFullYear(), month=empMoisRef.getMonth();
@@ -2200,17 +2190,17 @@
     const snap = await db.collection('pointages_employes').where('date','>=',toDateStr(first)).where('date','<=',toDateStr(last)).get();
     const totals=new Map();
     const totalsSemaine=new Map(); // lundi-vendredi uniquement (pour le solde 39h, hors week-end)
+    const joursPointesSemaine=new Map(); // lundi-vendredi uniquement : nb de jours où ce jour a réellement été pointé
     snap.forEach(doc=>{
       const d=doc.data();
       totals.set(d.personId,(totals.get(d.personId)||0)+(d.heuresCalculees||0));
       const dow = fromDateStr(d.date).getDay();
       if(dow!==0 && dow!==6){
         totalsSemaine.set(d.personId,(totalsSemaine.get(d.personId)||0)+(d.heuresCalculees||0));
+        if(!joursPointesSemaine.has(d.personId)) joursPointesSemaine.set(d.personId, new Set());
+        joursPointesSemaine.get(d.personId).add(d.date);
       }
     });
-    // Théorique : 39h lissées sur une semaine de 5 jours ouvrés, proratisées
-    // sur le nombre réel de jours lundi-vendredi du mois affiché.
-    const theorique39h = (39/5) * countJoursOuvresDansMois(year, month);
     const persons=[...cache.employes.values()].filter(p=>p.actif && totals.has(p.id));
     const body=document.getElementById('emp-month-body'); body.innerHTML='';
     let grand=0;
@@ -2221,6 +2211,11 @@
       const tdTotal=document.createElement('td'); tdTotal.textContent=fmtHeures(t);
       const tdSolde=document.createElement('td');
       if(p.suivi39h){
+        // Théorique : 39h lissées sur 5 jours ouvrés, mais uniquement sur les
+        // jours (lundi-vendredi) réellement pointés pour CET employé — un jour
+        // sans aucune heure inscrite (jour non travaillé) n'est pas compté.
+        const nbJoursPointes = joursPointesSemaine.get(p.id)?.size || 0;
+        const theorique39h = (39/5) * nbJoursPointes;
         const solde = (totalsSemaine.get(p.id)||0) - theorique39h;
         const badge=document.createElement('span');
         if(Math.abs(solde) < (1/60)){
