@@ -314,6 +314,13 @@
   .pill-toggle.on{background:#E1F0E7; color:var(--color-success);}
   .pill-toggle.refused{background:var(--color-danger-bg); color:var(--color-danger);}
 
+  .badge-39h{
+    display:inline-block; border-radius:999px; padding:.25em .7em;
+    font-size:.78rem; font-weight:700; white-space:nowrap;
+  }
+  .badge-39h.ok{background:#E1F0E7; color:var(--color-success);}
+  .badge-39h.over{background:var(--color-danger-bg); color:var(--color-danger);}
+
   .auth-mode-toggle{
     display:flex; border:1px solid var(--color-border); border-radius:8px; overflow:hidden;
     margin-top:.4rem;
@@ -627,9 +634,9 @@
         <button id="emp-week-next" class="secondary">&rarr;</button>
       </div>
       <table class="data-table">
-        <thead><tr><th>Employé</th><th>Total heures (semaine)</th></tr></thead>
+        <thead><tr><th>Employé</th><th>Total heures (semaine)</th><th>Moyenne 2 sem.</th></tr></thead>
         <tbody id="emp-week-body"></tbody>
-        <tfoot><tr><td><strong>Total général</strong></td><td id="emp-week-total"><strong>0</strong></td></tr></tfoot>
+        <tfoot><tr><td><strong>Total général</strong></td><td id="emp-week-total"><strong>0</strong></td><td></td></tr></tfoot>
       </table>
 
       <h2>Récap mois</h2>
@@ -649,10 +656,13 @@
         <form id="employe-form" class="inline-form">
           <input type="text" id="emp-nom" placeholder="Nom" required>
           <input type="text" id="emp-prenom" placeholder="Prénom" required>
+          <label style="display:flex; align-items:center; gap:.4rem; font-size:.9rem;">
+            <input type="checkbox" id="emp-suivi39h"> Limite 39h/sem. (lissée sur 2 sem.)
+          </label>
           <button type="submit">Ajouter</button>
         </form>
         <table class="data-table">
-          <thead><tr><th>Nom</th><th>Prénom</th><th>Actif</th><th></th></tr></thead>
+          <thead><tr><th>Nom</th><th>Prénom</th><th>Actif</th><th>Suivi 39h</th><th></th></tr></thead>
           <tbody id="employes-body"></tbody>
         </table>
       </div>
@@ -1655,8 +1665,9 @@
     e.preventDefault();
     const nom=document.getElementById('emp-nom').value.trim();
     const prenom=document.getElementById('emp-prenom').value.trim();
+    const suivi39h=document.getElementById('emp-suivi39h').checked;
     if(!nom||!prenom) return;
-    await db.collection('employes').add({ nom, prenom, actif:true, createdAt: FieldValue.serverTimestamp() });
+    await db.collection('employes').add({ nom, prenom, actif:true, suivi39h, createdAt: FieldValue.serverTimestamp() });
     e.target.reset();
     await refreshCaches();
     renderEmployesListTable();
@@ -1668,7 +1679,7 @@
     body.innerHTML='';
     [...cache.employes.values()].forEach(p=>{
       const tr=document.createElement('tr');
-      tr.innerHTML = `<td>${escapeHtml(p.nom)}</td><td>${escapeHtml(p.prenom)}</td><td></td><td></td>`;
+      tr.innerHTML = `<td>${escapeHtml(p.nom)}</td><td>${escapeHtml(p.prenom)}</td><td></td><td></td><td></td>`;
       const actifBtn=document.createElement('button');
       actifBtn.className='pill-toggle'+(p.actif?' on':'');
       actifBtn.textContent=p.actif?'Actif':'Inactif';
@@ -1677,6 +1688,14 @@
         await refreshCaches(); renderEmployesListTable();
       });
       tr.children[2].appendChild(actifBtn);
+      const suivi39hBtn=document.createElement('button');
+      suivi39hBtn.className='pill-toggle'+(p.suivi39h?' on':'');
+      suivi39hBtn.textContent=p.suivi39h?'Suivi 39h : oui':'Suivi 39h : non';
+      suivi39hBtn.addEventListener('click', async ()=>{
+        await db.collection('employes').doc(p.id).update({suivi39h:!p.suivi39h});
+        await refreshCaches(); renderEmployesListTable(); renderSemaineEmployes();
+      });
+      tr.children[3].appendChild(suivi39hBtn);
       const delBtn=document.createElement('button');
       delBtn.className='icon-btn danger'; delBtn.textContent='Supprimer';
       delBtn.addEventListener('click', async ()=>{
@@ -1685,7 +1704,7 @@
         await refreshCaches(); renderEmployesListTable();
         toast('Employé supprimé');
       });
-      tr.children[3].appendChild(delBtn);
+      tr.children[4].appendChild(delBtn);
       body.appendChild(tr);
     });
   }
@@ -2004,6 +2023,26 @@
     return {start,end};
   }
 
+  function dateOnly(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+
+  // Comme getWeekRange, mais une semaine Lundi-Dimanche qui chevauche deux mois
+  // est coupée à la frontière du mois : on ne garde que la portion du mois
+  // concerné par refDate, sans perdre les jours de l'autre mois (ils forment
+  // leur propre "semaine" partielle lors de la navigation suivante/précédente).
+  function getWeekRangeClipped(refDate){
+    const start = startOfWeek(refDate);
+    const end = addDays(start,6);
+    if(start.getMonth()===end.getMonth() && start.getFullYear()===end.getFullYear()){
+      return {start,end,partial:false};
+    }
+    const lastDayStartMonth = new Date(start.getFullYear(), start.getMonth()+1, 0);
+    if(dateOnly(refDate) <= lastDayStartMonth){
+      return {start, end: lastDayStartMonth, partial:true};
+    }
+    const firstDayEndMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+    return {start: firstDayEndMonth, end, partial:true};
+  }
+
   function populateWeekAgenceFilter(){
     const sel = document.getElementById('week-agence-filter');
     const current = sel.value;
@@ -2014,9 +2053,12 @@
   document.getElementById('week-categorie-filter').addEventListener('change', ()=>{ renderSemaineInterimaires(); renderMoisInterimaires(); });
 
   let semaineRef = new Date();
+  let semaineRange = null;
   async function renderSemaineInterimaires(){
-    const {start,end} = getWeekRange(semaineRef);
-    document.getElementById('week-label').textContent = `Semaine du ${start.toLocaleDateString('fr-FR')} au ${end.toLocaleDateString('fr-FR')}`;
+    const {start,end,partial} = getWeekRangeClipped(semaineRef);
+    semaineRange = {start,end};
+    const suffix = partial ? ' (semaine partielle)' : '';
+    document.getElementById('week-label').textContent = `Semaine du ${start.toLocaleDateString('fr-FR')} au ${end.toLocaleDateString('fr-FR')}${suffix}`;
     const snap = await db.collection('pointages_interimaires').where('date','>=',toDateStr(start)).where('date','<=',toDateStr(end)).get();
     const totals = new Map();
     snap.forEach(doc=>{ const d=doc.data(); totals.set(d.personId, (totals.get(d.personId)||0) + (d.heuresCalculees||0)); });
@@ -2042,8 +2084,14 @@
     });
     document.getElementById('week-total').innerHTML = `<strong>${fmtHeures(grandTotal)}</strong>`;
   }
-  document.getElementById('week-prev').addEventListener('click', ()=>{ semaineRef=addDays(semaineRef,-7); renderSemaineInterimaires(); });
-  document.getElementById('week-next').addEventListener('click', ()=>{ semaineRef=addDays(semaineRef,7); renderSemaineInterimaires(); });
+  document.getElementById('week-prev').addEventListener('click', ()=>{
+    semaineRef = semaineRange ? addDays(semaineRange.start,-1) : addDays(semaineRef,-7);
+    renderSemaineInterimaires();
+  });
+  document.getElementById('week-next').addEventListener('click', ()=>{
+    semaineRef = semaineRange ? addDays(semaineRange.end,1) : addDays(semaineRef,7);
+    renderSemaineInterimaires();
+  });
 
   let moisInterimRef = new Date();
   async function renderMoisInterimaires(){
@@ -2087,12 +2135,47 @@
     document.getElementById('emp-week-label').textContent = `Semaine du ${start.toLocaleDateString('fr-FR')} au ${end.toLocaleDateString('fr-FR')}`;
     const snap = await db.collection('pointages_employes').where('date','>=',toDateStr(start)).where('date','<=',toDateStr(end)).get();
     const totals=new Map();
-    snap.forEach(doc=>{const d=doc.data(); totals.set(d.personId,(totals.get(d.personId)||0)+(d.heuresCalculees||0));});
+    const totalsSemaine=new Map(); // lundi-vendredi uniquement (pour le calcul 39h, hors week-end)
+    snap.forEach(doc=>{
+      const d=doc.data();
+      totals.set(d.personId,(totals.get(d.personId)||0)+(d.heuresCalculees||0));
+      const dow = fromDateStr(d.date).getDay(); // 0=dimanche, 6=samedi
+      if(dow!==0 && dow!==6){
+        totalsSemaine.set(d.personId,(totalsSemaine.get(d.personId)||0)+(d.heuresCalculees||0));
+      }
+    });
+
+    // Moyenne glissante sur 2 semaines (semaine affichée + semaine précédente)
+    // pour les employés suivis sur la limite 39h/semaine lissée — hors heures de week-end.
+    const prevStart = addDays(start,-7), prevEnd = addDays(start,-1);
+    const prevSnap = await db.collection('pointages_employes').where('date','>=',toDateStr(prevStart)).where('date','<=',toDateStr(prevEnd)).get();
+    const prevTotalsSemaine=new Map();
+    prevSnap.forEach(doc=>{
+      const d=doc.data();
+      const dow = fromDateStr(d.date).getDay();
+      if(dow!==0 && dow!==6){
+        prevTotalsSemaine.set(d.personId,(prevTotalsSemaine.get(d.personId)||0)+(d.heuresCalculees||0));
+      }
+    });
+
     const persons=[...cache.employes.values()].filter(p=>p.actif && totals.has(p.id));
     const body=document.getElementById('emp-week-body'); body.innerHTML='';
     let grand=0;
     persons.forEach(p=>{ const t=totals.get(p.id)||0; grand+=t;
-      const tr=document.createElement('tr'); tr.innerHTML=`<td>${escapeHtml(p.nom)} ${escapeHtml(p.prenom)}</td><td>${fmtHeures(t)}</td>`; body.appendChild(tr); });
+      const tr=document.createElement('tr');
+      const tdNom=document.createElement('td'); tdNom.textContent=`${p.nom} ${p.prenom}`;
+      const tdTotal=document.createElement('td'); tdTotal.textContent=fmtHeures(t);
+      const tdMoy=document.createElement('td');
+      if(p.suivi39h){
+        const moy = ((totalsSemaine.get(p.id)||0) + (prevTotalsSemaine.get(p.id)||0)) / 2;
+        const badge=document.createElement('span');
+        badge.className = 'badge-39h ' + (moy>39 ? 'over' : 'ok');
+        badge.textContent = `${fmtHeures(moy)}/sem`;
+        tdMoy.appendChild(badge);
+      }
+      tr.append(tdNom, tdTotal, tdMoy);
+      body.appendChild(tr);
+    });
     document.getElementById('emp-week-total').innerHTML=`<strong>${fmtHeures(grand)}</strong>`;
   }
   document.getElementById('emp-week-prev').addEventListener('click', ()=>{empSemaineRef=addDays(empSemaineRef,-7); renderSemaineEmployes();});
