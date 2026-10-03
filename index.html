@@ -320,6 +320,7 @@
   }
   .badge-39h.ok{background:#E1F0E7; color:var(--color-success);}
   .badge-39h.over{background:var(--color-danger-bg); color:var(--color-danger);}
+  .badge-39h.neutral{background:#EEF1F0; color:var(--color-muted);}
 
   .auth-mode-toggle{
     display:flex; border:1px solid var(--color-border); border-radius:8px; overflow:hidden;
@@ -646,9 +647,9 @@
         <button id="emp-month-next" class="secondary">&rarr;</button>
       </div>
       <table class="data-table">
-        <thead><tr><th>Employé</th><th>Total heures (mois)</th></tr></thead>
+        <thead><tr><th>Employé</th><th>Total heures (mois)</th><th>Solde 39h (lissé, hors week-end)</th></tr></thead>
         <tbody id="emp-month-body"></tbody>
-        <tfoot><tr><td><strong>Total général</strong></td><td id="emp-month-total"><strong>0</strong></td></tr></tfoot>
+        <tfoot><tr><td><strong>Total général</strong></td><td id="emp-month-total"><strong>0</strong></td><td></td></tr></tfoot>
       </table>
 
       <div class="admin-only" hidden>
@@ -2181,6 +2182,16 @@
   document.getElementById('emp-week-prev').addEventListener('click', ()=>{empSemaineRef=addDays(empSemaineRef,-7); renderSemaineEmployes();});
   document.getElementById('emp-week-next').addEventListener('click', ()=>{empSemaineRef=addDays(empSemaineRef,7); renderSemaineEmployes();});
 
+  function countJoursOuvresDansMois(year, month){
+    const nbJours = new Date(year, month+1, 0).getDate();
+    let n=0;
+    for(let day=1; day<=nbJours; day++){
+      const dow = new Date(year, month, day).getDay(); // 0=dimanche, 6=samedi
+      if(dow!==0 && dow!==6) n++;
+    }
+    return n;
+  }
+
   let empMoisRef = new Date();
   async function renderMoisEmployes(){
     const year=empMoisRef.getFullYear(), month=empMoisRef.getMonth();
@@ -2188,12 +2199,45 @@
     document.getElementById('emp-month-label').textContent = monthLabel(empMoisRef);
     const snap = await db.collection('pointages_employes').where('date','>=',toDateStr(first)).where('date','<=',toDateStr(last)).get();
     const totals=new Map();
-    snap.forEach(doc=>{const d=doc.data(); totals.set(d.personId,(totals.get(d.personId)||0)+(d.heuresCalculees||0));});
+    const totalsSemaine=new Map(); // lundi-vendredi uniquement (pour le solde 39h, hors week-end)
+    snap.forEach(doc=>{
+      const d=doc.data();
+      totals.set(d.personId,(totals.get(d.personId)||0)+(d.heuresCalculees||0));
+      const dow = fromDateStr(d.date).getDay();
+      if(dow!==0 && dow!==6){
+        totalsSemaine.set(d.personId,(totalsSemaine.get(d.personId)||0)+(d.heuresCalculees||0));
+      }
+    });
+    // Théorique : 39h lissées sur une semaine de 5 jours ouvrés, proratisées
+    // sur le nombre réel de jours lundi-vendredi du mois affiché.
+    const theorique39h = (39/5) * countJoursOuvresDansMois(year, month);
     const persons=[...cache.employes.values()].filter(p=>p.actif && totals.has(p.id));
     const body=document.getElementById('emp-month-body'); body.innerHTML='';
     let grand=0;
-    persons.forEach(p=>{const t=totals.get(p.id)||0; grand+=t;
-      const tr=document.createElement('tr'); tr.innerHTML=`<td>${escapeHtml(p.nom)} ${escapeHtml(p.prenom)}</td><td>${fmtHeures(t)}</td>`; body.appendChild(tr);});
+    persons.forEach(p=>{
+      const t=totals.get(p.id)||0; grand+=t;
+      const tr=document.createElement('tr');
+      const tdNom=document.createElement('td'); tdNom.textContent=`${p.nom} ${p.prenom}`;
+      const tdTotal=document.createElement('td'); tdTotal.textContent=fmtHeures(t);
+      const tdSolde=document.createElement('td');
+      if(p.suivi39h){
+        const solde = (totalsSemaine.get(p.id)||0) - theorique39h;
+        const badge=document.createElement('span');
+        if(Math.abs(solde) < (1/60)){
+          badge.className = 'badge-39h neutral';
+          badge.textContent = 'Équilibré';
+        } else if(solde > 0){
+          badge.className = 'badge-39h over';
+          badge.textContent = `Vous devez ${fmtHeures(solde)}`;
+        } else {
+          badge.className = 'badge-39h ok';
+          badge.textContent = `Il vous doit ${fmtHeures(Math.abs(solde))}`;
+        }
+        tdSolde.appendChild(badge);
+      }
+      tr.append(tdNom, tdTotal, tdSolde);
+      body.appendChild(tr);
+    });
     document.getElementById('emp-month-total').innerHTML=`<strong>${fmtHeures(grand)}</strong>`;
   }
   document.getElementById('emp-month-prev').addEventListener('click', ()=>{ empMoisRef=new Date(empMoisRef.getFullYear(), empMoisRef.getMonth()-1, 1); renderMoisEmployes(); });
